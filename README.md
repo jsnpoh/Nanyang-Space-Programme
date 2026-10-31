@@ -51,6 +51,25 @@ npm test
 npm run build
 ```
 
+## Screen a new conjunction CSV
+
+Use **Screen a new dataset** in the dashboard to choose a CSV file or a
+plain-text `.txt` file containing comma-separated CSV data. Screening runs
+locally in your browser; the file is not sent to a server. Excel files should
+be saved/exported as CSV first. Files are limited to 50 MB and 100,000 rows.
+The page shows risk-tier counts, a preview, any rows it could not screen,
+and lets you download the original rows with screening results appended. This
+applies the deterministic screening rules to supplied Pc/risk and distance
+values; it does not retrain the AI model or estimate missing Pc values.
+
+The CSV needs either a `pc` column containing collision probability (0–1) or a
+`risk` column containing `log10(Pc)`, plus one miss-distance column:
+`miss_distance_m` (meters), `miss_distance_km` (kilometers), or
+`miss_distance` (meters, matching the supplied dataset). Optional columns are
+`event_id` and `time_to_tca` (days); when TCA is included, the dashboard also
+counts unique elevated/critical events within 24 hours. Headers are
+case-insensitive. Download the template from the upload panel for an example.
+
 These are screening/demo outputs, not flight-certified maneuver advice. The
 thresholds in the project brief should be checked against the actual mission
 conjunction policy and referenced NASA/ESA guidance before operational use.
