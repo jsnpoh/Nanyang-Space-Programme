@@ -6,3 +6,8 @@ __pycache__/
 .streamlit/secrets.toml
 artifacts/
 .venv/
+
+# Large datasets (over GitHub 100MB limit) - keep local
+public/data/train_data.csv
+public/data/test_data.csv
+.vscode/

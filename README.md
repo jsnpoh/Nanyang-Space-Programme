@@ -1,9 +1,11 @@
 # Nanyang Space Programme
 
-Satellite conjunction-risk evaluator and dataset dashboard. The event-level
-classifier predicts workbook `final_tier` labels from eligible pre-approach
-telemetry. The separate test split is used for predictions only because its
-final event outcomes are not provided.
+Local CSV dashboard for exploring the supplied training and test datasets.
+The overview reads both bundled files on startup, displays their summaries,
+plots the highest-risk event's observed relative trajectory, collision
+probability, and miss distance, and includes a decorative Earth-and-satellite
+illustration. CSV parsing runs in the browser; the chart uses observed
+telemetry and the illustration is not live tracking or a prediction.
 
 ## Run the dashboard
 
@@ -12,9 +14,10 @@ npm install
 npm run dev
 ```
 
-The dataset explorer reads `src/data/dataset-summary.json`, and the event-tier
-model reads `src/data/event-model-summary.json`; neither requires the original
-CSVs at runtime.
+The dashboard loads `public/data/train_data.csv` and
+`public/data/test_data.csv` automatically on startup. These source CSVs are
+bundled with the app and streamed in the browser for summaries and previews.
+You can also replace or remove either file from **Upload data**.
 
 ## Regenerate the dataset summary
 
@@ -25,8 +28,7 @@ npm run data:summary -- "C:\Users\you\Downloads\train_data.csv" "C:\Users\you\Do
 ```
 
 This streams the CSV files locally and updates the raw telemetry statistics in
-`src/data/dataset-summary.json`. The source datasets are not copied into the
-website or uploaded by this script. The dashboard's event-tier classifier is
+`src/data/dataset-summary.json`. The dashboard's event-tier classifier is
 generated separately as described below.
 
 The raw telemetry summary uses the permitted inputs: `time_to_tca`, `miss_distance`,
@@ -65,8 +67,8 @@ event ID so messages from the same event cannot cross the split. Test event IDs
 are kept separate from training labels; test outputs are predictions only, not
 accuracy metrics, because test final outcomes are unavailable. The generated
 `src/data/event-model-summary.json` contains validation metrics and test
-prediction summaries. Source CSV files remain local and are not copied into
-the app.
+prediction summaries. The dashboard currently displays the bundled CSV
+summaries; it does not train a model or generate predictions.
 
 ## Screen a new conjunction CSV
 

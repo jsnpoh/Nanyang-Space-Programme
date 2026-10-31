@@ -1,9 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import datasetSummary from "./data/dataset-summary.json";
-import eventModelSummary from "./data/event-model-summary.json";
-import { createScreenedCsv, screenCsvContent } from "./csvScreening.js";
-import { classifyCollisionRisk } from "./riskPolicy.js";
-import { riskTestCases } from "./riskTestCases.js";
+import { useEffect, useRef, useState } from "react";
+import { parseEventLabels, summarizeCsvFile, summarizeCsvStream } from "./datasetUpload.js";
 
 const events = [
   {
@@ -49,13 +45,13 @@ const events = [
 
 const navigation = [
   { label: "Overview", icon: "grid", href: "#overview" },
-  { label: "Risk evaluator", icon: "crosshair", href: "#evaluator" },
   { label: "Upload data", icon: "download", href: "#upload" },
-  { label: "AI validation", icon: "chart", href: "#model" },
+  { label: "Training data", icon: "chart", href: "#training" },
+  { label: "Test data", icon: "chart", href: "#test" },
   { label: "Dataset analysis", icon: "chart", href: "#datasets" },
-  { label: "Conjunctions", icon: "orbit", href: "#conjunctions", count: "12" },
-  { label: "Fleet health", icon: "satellite", href: "#fleet" },
+  { label: "Model evaluation", icon: "chart", href: "#model" },
   { label: "Analytics", icon: "chart", href: "#analytics" },
+  { label: "Help", icon: "help", href: "#help" },
 ];
 
 function Icon({ name, size = 18, strokeWidth = 1.8 }) {
@@ -75,6 +71,7 @@ function Icon({ name, size = 18, strokeWidth = 1.8 }) {
     orbit: <><circle cx="12" cy="12" r="2.3" /><ellipse cx="12" cy="12" rx="9" ry="4.3" transform="rotate(-35 12 12)" /><path d="m18.7 5.2 1.1-.1-.1 1.1" /></>,
     satellite: <><path d="m10.5 13.5 3-3M8 16l-3 3m11-11 3-3M7 8l9 9" /><path d="m5 5 3 3-3 3-3-3 3-3Zm14 11 3 3-3 3-3-3 3-3Z" /><rect x="9" y="9" width="6" height="6" rx="1.2" transform="rotate(-45 12 12)" /></>,
     chart: <><path d="M4 19.5h16M6.5 16v-4m5 4V6m5 10V9" /><path d="m5 8 5-4 5 2 4-3" /></>,
+    help: <><circle cx="12" cy="12" r="9" /><path d="M9.6 9a2.5 2.5 0 1 1 4.3 1.8c-1.1 1.1-1.9 1.4-1.9 3" /><path d="M12 17.5h.01" /></>,
     search: <><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></>,
     bell: <><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" /><path d="M10 21h4" /></>,
     chevron: <path d="m9 18 6-6-6-6" />,
@@ -90,38 +87,19 @@ function Icon({ name, size = 18, strokeWidth = 1.8 }) {
   return <svg {...common}>{paths[name] || paths.grid}</svg>;
 }
 
-function Brand() {
+function Brand({ onNavigate }) {
   return (
-    <a className="brand" href="#overview" aria-label="Orbital home">
+    <a className="brand" href="#overview" aria-label="Orbital home" onClick={(event) => { event.preventDefault(); onNavigate("#overview"); }}>
       <span className="brand-icon"><Icon name="orbit" size={20} /></span>
       <span>orbital<span className="brand-period">.</span></span>
     </a>
   );
 }
 
-function Sidebar() {
-  const [activeHref, setActiveHref] = useState(() =>
-    navigation.some((item) => item.href === window.location.hash)
-      ? window.location.hash
-      : "#overview",
-  );
-
-  useEffect(() => {
-    function syncActiveLink() {
-      setActiveHref(
-        navigation.some((item) => item.href === window.location.hash)
-          ? window.location.hash
-          : "#overview",
-      );
-    }
-
-    window.addEventListener("hashchange", syncActiveLink);
-    return () => window.removeEventListener("hashchange", syncActiveLink);
-  }, []);
-
+function Sidebar({ activeHref, onNavigate }) {
   return (
     <aside className="sidebar">
-      <Brand />
+      <Brand onNavigate={onNavigate} />
       <div className="workspace-switcher">
         <div className="workspace-avatar">N</div>
         <div className="workspace-copy"><strong>Nanyang Space Programme</strong><span>Mission control</span></div>
@@ -135,7 +113,7 @@ function Sidebar() {
             href={item.href}
             key={item.label}
             aria-current={activeHref === item.href ? "page" : undefined}
-            onClick={() => setActiveHref(item.href)}
+            onClick={(event) => { event.preventDefault(); onNavigate(item.href); }}
           >
             <Icon name={item.icon} size={17} />
             <span>{item.label}</span>
@@ -145,35 +123,18 @@ function Sidebar() {
       </nav>
       <div className="sidebar-bottom">
         <div className="connection-card">
-          <span className="connection-icon"><Icon name="crosshair" size={17} /></span>
-          <div><strong>Demo environment</strong><span>Sample data · not live</span></div>
-          <span className="online-dot" />
+          <span className="connection-icon"><Icon name="shield" size={17} /></span>
+          <div><strong>Local processing</strong><span>CSV data stays on this app</span></div>
         </div>
-        <button className="profile-button" type="button">
-          <span className="profile-avatar">AM</span>
-          <span className="profile-copy"><strong>Alex Morgan</strong><small>Flight dynamics</small></span>
-          <span className="profile-menu">•••</span>
-        </button>
       </div>
     </aside>
   );
 }
 
-function Topbar({ query, onQueryChange }) {
+function Topbar({ activeLabel }) {
   return (
     <div className="topbar">
-      <div className="breadcrumbs"><span>Mission control</span><Icon name="chevron" size={14} /><strong>Overview</strong></div>
-      <div className="topbar-actions">
-        <label className="search-field">
-          <Icon name="search" size={16} />
-          <input aria-label="Search satellites or events" placeholder="Search satellites, events..." value={query} onChange={(event) => onQueryChange(event.target.value)} />
-          <kbd>⌘ K</kbd>
-        </label>
-        <button className="icon-button notification-button" type="button" aria-label="Notifications">
-          <Icon name="bell" size={18} /><span className="notification-dot" />
-        </button>
-        <button className="help-button" type="button" aria-label="Help and support">?</button>
-      </div>
+      <div className="breadcrumbs"><span>Mission control</span><Icon name="chevron" size={14} /><strong>{activeLabel}</strong></div>
     </div>
   );
 }
@@ -188,6 +149,222 @@ function MetricCard({ label, value, detail, icon, tone, trend }) {
       <div className="metric-value">{value}</div>
       <div className="metric-detail">{trend && <span className={`metric-trend ${tone}`}>{trend}</span>}{detail}</div>
     </article>
+  );
+}
+
+function EarthOrbitIllustration() {
+  return (
+    <figure className="earth-orbit-illustration">
+      <svg viewBox="0 0 520 340" role="img" aria-labelledby="earth-orbit-title">
+        <title id="earth-orbit-title">Illustration of Earth and an orbiting satellite</title>
+        <defs>
+          <radialGradient id="illustrationEarth" cx="34%" cy="28%" r="74%">
+            <stop offset="0%" stopColor="#b6e4f4" />
+            <stop offset="62%" stopColor="#4a9cc2" />
+            <stop offset="100%" stopColor="#23628e" />
+          </radialGradient>
+          <radialGradient id="illustrationGlow">
+            <stop offset="0%" stopColor="#8edaf0" stopOpacity=".22" />
+            <stop offset="100%" stopColor="#8edaf0" stopOpacity="0" />
+          </radialGradient>
+          <clipPath id="illustrationEarthClip"><circle cx="260" cy="191" r="89" /></clipPath>
+        </defs>
+        <circle cx="260" cy="191" r="148" fill="url(#illustrationGlow)" />
+        <g className="illustration-stars">
+          <circle cx="74" cy="75" r="2" /><circle cx="430" cy="70" r="1.5" />
+          <circle cx="458" cy="242" r="2" /><circle cx="95" cy="259" r="1.5" />
+          <circle cx="164" cy="42" r="1.3" /><circle cx="363" cy="299" r="1.5" />
+        </g>
+        <ellipse className="illustration-orbit" cx="260" cy="191" rx="211" ry="78" transform="rotate(-24 260 191)" />
+        <ellipse className="illustration-orbit illustration-orbit-secondary" cx="260" cy="191" rx="202" ry="106" transform="rotate(36 260 191)" />
+        <circle className="illustration-earth" cx="260" cy="191" r="89" />
+        <g clipPath="url(#illustrationEarthClip)" className="illustration-land">
+          <path d="m202 145 22-18 25 4 14 16-9 12-18 2-8 17-20-2-14-13Z" />
+          <path d="m240 184 19-9 16 11 7 19-12 17 2 22-15 19-14-12-1-21-14-20Z" />
+          <path d="m280 123 26-9 20 12 4 17-15 13-21-5-14 8-12-15Z" />
+          <path d="m324 174 23-8 22 13 7 16-14 10-19-4-10 13-15-9Z" />
+        </g>
+        <g className="illustration-satellite" transform="translate(390 105) rotate(-24)">
+          <path d="M-19 0h38M0-19v38" />
+          <rect x="-8" y="-8" width="16" height="16" rx="3" />
+          <rect x="-31" y="-8" width="12" height="16" rx="2" />
+          <rect x="19" y="-8" width="12" height="16" rx="2" />
+          <path d="m0-8 0-14m-5 0h10" />
+        </g>
+        <circle className="illustration-satellite-signal" cx="390" cy="105" r="16" />
+      </svg>
+      <figcaption>Orbital illustration · not live tracking</figcaption>
+    </figure>
+  );
+}
+
+function formatDistance(meters) {
+  if (!Number.isFinite(meters)) return "—";
+  return Math.abs(meters) >= 1000 ? `${(meters / 1000).toFixed(meters >= 10000 ? 0 : 1)} km` : `${Math.round(meters)} m`;
+}
+
+function OrbitGeometryView({ encounter }) {
+  const orbit = encounter?.orbit;
+  const points = (encounter?.trajectory ?? []).filter((point) => Number.isFinite(point.relativeT) && Number.isFinite(point.relativeN));
+  const [progress, setProgress] = useState(0);
+  const [yaw, setYaw] = useState(-0.7);
+  const dragRef = useRef(null);
+  const eventId = encounter?.eventId;
+
+  useEffect(() => {
+    if (points.length < 2) return undefined;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setProgress(1);
+      return undefined;
+    }
+    const travelMs = 7000;
+    const holdMs = 1800;
+    let frame;
+    let last = performance.now();
+    const start = last;
+    const tick = (now) => {
+      const elapsed = (now - start) % (travelMs + holdMs);
+      const linear = Math.min(elapsed / travelMs, 1);
+      setProgress(linear * linear * (3 - 2 * linear));
+      if (!dragRef.current) setYaw((value) => value + (now - last) * 0.00018);
+      last = now;
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [eventId, points.length]);
+
+  if (!encounter || points.length < 2) return <EarthOrbitIllustration />;
+
+  const size = 300;
+  const center = size / 2;
+  const pitch = 0.5;
+  const extent = Math.max(
+    ...points.map((point) => Math.max(Math.abs(point.relativeT), Math.abs(point.relativeN), Math.abs(point.relativeR ?? 0))),
+    1,
+  ) * 1.1;
+  const unit = 108 / extent;
+  const project = (t, r, n) => {
+    const x = t * unit;
+    const y = r * unit;
+    const z = n * unit;
+    const x1 = x * Math.cos(yaw) + z * Math.sin(yaw);
+    const z1 = -x * Math.sin(yaw) + z * Math.cos(yaw);
+    const y1 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
+    const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
+    const depth = 1 / (1 - z2 / 520);
+    return { x: center + x1 * depth, y: center - y1 * depth, depth };
+  };
+  const screen = (point) => project(point.relativeT, point.relativeR ?? 0, point.relativeN);
+  const path = points.map(screen);
+
+  const position = progress * (points.length - 1);
+  const index = Math.min(Math.floor(position), points.length - 2);
+  const fraction = position - index;
+  const mix = (key) => {
+    const from = points[index][key] ?? 0;
+    const to = points[index + 1][key] ?? 0;
+    return from + (to - from) * fraction;
+  };
+  const chaser = project(mix("relativeT"), mix("relativeR"), mix("relativeN"));
+  const floorChaser = project(mix("relativeT"), -extent, mix("relativeN"));
+  const separation = Number.isFinite(points[index].missDistanceMeters) && Number.isFinite(points[index + 1].missDistanceMeters)
+    ? mix("missDistanceMeters")
+    : null;
+  const daysToTca = Number.isFinite(points[index].timeToTcaDays) && Number.isFinite(points[index + 1].timeToTcaDays)
+    ? mix("timeToTcaDays")
+    : null;
+  const trail = [...path.slice(0, index + 1), chaser].map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const closest = Number.isFinite(encounter.closestRelativeT) && Number.isFinite(encounter.closestRelativeN)
+    ? project(encounter.closestRelativeT, encounter.closestRelativeR ?? 0, encounter.closestRelativeN)
+    : null;
+  const origin = project(0, 0, 0);
+
+  const gridSteps = [-1, -0.5, 0, 0.5, 1];
+  const gridLines = gridSteps.flatMap((step) => [
+    [project(-extent, -extent, step * extent), project(extent, -extent, step * extent)],
+    [project(step * extent, -extent, -extent), project(step * extent, -extent, extent)],
+  ]);
+  const axes = [
+    { label: "T", end: project(extent, 0, 0) },
+    { label: "R", end: project(0, extent, 0) },
+    { label: "N", end: project(0, 0, extent) },
+  ];
+  const missLabel = Number.isFinite(encounter.minMissDistanceMeters) ? formatDistance(encounter.minMissDistanceMeters) : "—";
+  const crossing = orbit && Number.isFinite(orbit.targetIncDeg) && Number.isFinite(orbit.chaserIncDeg)
+    ? Math.abs(orbit.targetIncDeg - orbit.chaserIncDeg)
+    : null;
+
+  const onPointerDown = (event) => {
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    dragRef.current = event.clientX;
+  };
+  const onPointerMove = (event) => {
+    if (dragRef.current === null) return;
+    setYaw((value) => value + (event.clientX - dragRef.current) * 0.01);
+    dragRef.current = event.clientX;
+  };
+  const onPointerUp = () => { dragRef.current = null; };
+
+  return (
+    <figure className="earth-orbit-illustration orbit-geometry close-approach">
+      <div className="close-approach-readout">
+        <div><span>Time to closest approach</span><strong>{Number.isFinite(daysToTca) ? `${(daysToTca * 24).toFixed(1)} h` : "—"}</strong></div>
+        <div><span>Separation</span><strong>{formatDistance(separation)}</strong></div>
+      </div>
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        role="img"
+        aria-labelledby="close-approach-title"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        <title id="close-approach-title">3D animation of the chaser object passing the target along the observed relative path for event {encounter.eventId}. Drag to rotate.</title>
+        <defs>
+          <radialGradient id="approachTargetFill" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stopColor="#8cc4ff" />
+            <stop offset="100%" stopColor="#0a5fd0" />
+          </radialGradient>
+          <radialGradient id="approachChaserFill" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stopColor="#ffd9a0" />
+            <stop offset="100%" stopColor="#f08a00" />
+          </radialGradient>
+        </defs>
+        <g className="approach-floor">
+          {gridLines.map(([from, to], i) => <line key={i} x1={from.x} y1={from.y} x2={to.x} y2={to.y} />)}
+        </g>
+        {axes.map(({ label, end }) => (
+          <g key={label}>
+            <line className="approach-axis-3d" x1={origin.x} y1={origin.y} x2={end.x} y2={end.y} />
+            <text className="approach-axis-label" x={end.x + 4} y={end.y + 3}>{label}</text>
+          </g>
+        ))}
+        <polyline className="approach-path" points={path.map(({ x, y }) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ")} />
+        <line className="approach-drop" x1={chaser.x} y1={chaser.y} x2={floorChaser.x} y2={floorChaser.y} />
+        <ellipse className="approach-shadow" cx={floorChaser.x} cy={floorChaser.y} rx={7 * floorChaser.depth} ry={3 * floorChaser.depth} />
+        <polyline className="approach-trail" points={trail} />
+        {closest && (
+          <g>
+            <circle className="approach-closest-pulse" cx={closest.x} cy={closest.y} r="6" />
+            <circle className="approach-closest" cx={closest.x} cy={closest.y} r="3" />
+          </g>
+        )}
+        <line className="approach-link" x1={origin.x} y1={origin.y} x2={chaser.x} y2={chaser.y} />
+        <circle className="approach-target-halo" cx={origin.x} cy={origin.y} r="15" />
+        <circle cx={origin.x} cy={origin.y} r={7 * origin.depth} fill="url(#approachTargetFill)" />
+        <circle className="approach-chaser-halo" cx={chaser.x} cy={chaser.y} r={11 * chaser.depth} />
+        <circle cx={chaser.x} cy={chaser.y} r={5.5 * chaser.depth} fill="url(#approachChaserFill)" />
+      </svg>
+      <div className="approach-legend">
+        <span><i className="geometry-key target" />Target (fixed)</span>
+        <span><i className="geometry-key chaser" />Chaser{encounter.chaserObjectType ? ` · ${encounter.chaserObjectType.toLowerCase()}` : ""}</span>
+        {crossing !== null && <span>Plane angle {crossing.toFixed(1)}°</span>}
+        <span className="approach-hint">Drag to rotate</span>
+      </div>
+      <figcaption>Event {encounter.eventId} · 3D replay of the CSV's relative position (R radial, T along-track, N cross-track) · closest miss {missLabel} · not a live track</figcaption>
+    </figure>
   );
 }
 
@@ -267,7 +444,7 @@ function OrbitMap({ selectedEvent }) {
   );
 }
 
-function RiskSummary({ event, onSchedule, scheduled }) {
+function RiskSummary({ event, onSchedule, scheduled, onViewAnalysis }) {
   return (
     <aside className="risk-panel">
       <div className="risk-panel-heading">
@@ -286,14 +463,14 @@ function RiskSummary({ event, onSchedule, scheduled }) {
       <button className={`maneuver-button ${scheduled ? "scheduled" : ""}`} type="button" onClick={onSchedule}>
         {scheduled ? <><Icon name="shield" size={16} /> Maneuver scheduled</> : <><Icon name="crosshair" size={16} /> Plan avoidance maneuver</>}
       </button>
-      <button className="analysis-link" type="button" onClick={() => document.getElementById("analytics")?.scrollIntoView({ behavior: "smooth" })}>
-        View AI risk analysis <Icon name="arrow" size={14} />
+      <button className="analysis-link" type="button" onClick={onViewAnalysis}>
+        View model evaluation <Icon name="arrow" size={14} />
       </button>
     </aside>
   );
 }
 
-function Conjunctions({ selectedEvent, onSelect, searchTerm }) {
+function Conjunctions({ selectedEvent, onSelect, searchTerm, compact = false, onViewAll }) {
   const [filter, setFilter] = useState("All events");
   const visibleEvents = useMemo(() => events.filter((event) => {
     const matchesSearch = `${event.id} ${event.object} ${event.secondary}`.toLowerCase().includes(searchTerm.toLowerCase());
@@ -302,11 +479,11 @@ function Conjunctions({ selectedEvent, onSelect, searchTerm }) {
   }), [filter, searchTerm]);
 
   return (
-    <section className="conjunction-section" id="conjunctions">
+    <section className={`conjunction-section ${compact ? "compact-conjunctions" : ""}`} id="conjunctions">
       <div className="section-heading">
-        <div><span className="panel-eyebrow">DEMO DATA · NOT FROM CSV</span><h2>Example conjunctions <span className="heading-count">12</span></h2></div>
-        <button className="view-all-button" type="button" onClick={() => setFilter(filter === "All events" ? "High" : "All events")}>
-          {filter === "All events" ? "View all events" : "Show all"} <Icon name="arrow" size={14} />
+        <div><span className="panel-eyebrow">{compact ? "UPCOMING · DEMO DATA" : "DEMO DATA · NOT FROM CSV"}</span><h2>{compact ? "Conjunction watch" : "Example conjunctions"} <span className="heading-count">12</span></h2></div>
+        <button className="view-all-button" type="button" onClick={compact ? onViewAll : () => setFilter(filter === "All events" ? "High" : "All events")}>
+          {compact ? "View all events" : filter === "All events" ? "View all events" : "Show all"} <Icon name="arrow" size={14} />
         </button>
       </div>
       <div className="event-filters" role="group" aria-label="Filter conjunctions">
@@ -372,7 +549,7 @@ function formatRaw(value) {
     : "—";
 }
 
-function DatasetAnalytics() {
+function LegacyDatasetAnalytics() {
   const [selectedSplit, setSelectedSplit] = useState("train");
   const dataset = datasetSummary.splits[selectedSplit];
   const riskStats = dataset.stats.risk;
@@ -732,7 +909,7 @@ function CsvScreening() {
         <div className="csv-upload-controls">
           <div className="csv-upload-copy">
             <strong>Choose a conjunction CSV</strong>
-            <span>Applies the screening rules to Pc and miss distance; it does not retrain the AI model. Your file stays in this browser.</span>
+            <span>Applies the screening rules to Pc and miss distance; it does not retrain the risk model. Your file stays in this browser.</span>
           </div>
           <div className="csv-upload-actions">
             <button type="button" className="csv-template-button" onClick={downloadTemplate}>Download CSV template</button>
@@ -799,14 +976,14 @@ function downloadCsv(fileName, content) {
   window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-function ModelEvaluation() {
+function LegacyModelEvaluation() {
   const { model, training, validation, test } = eventModelSummary;
   const modelEvaluation = validation.metrics;
   const critical = modelEvaluation.classMetrics.critical;
   return (
     <section className="model-section" id="model">
       <div className="section-heading">
-        <div><span className="panel-eyebrow">EVENT-LEVEL TRAINING · GROUPED VALIDATION</span><h2>AI event-tier model</h2></div>
+        <div><span className="panel-eyebrow">EVENT-LEVEL TRAINING · GROUPED VALIDATION</span><h2>Event-tier model</h2></div>
         <span className="model-kind">{model.algorithm}</span>
       </div>
       <div className="model-panel">
@@ -826,7 +1003,7 @@ function ModelEvaluation() {
           <div className="warning-count"><strong>{(critical.recall * 100).toFixed(1)}%</strong><span>critical recall</span></div>
         </div>
         <div className="model-explanation">
-          <Icon name="spark" size={16} />
+          <Icon name="chart" size={16} />
           <p>Target: each event&apos;s workbook <code>final_tier</code>. Training uses one latest observation per event at least 2 days before TCA; {training.fitEvents.toLocaleString()} events fit the model and {modelEvaluation.events.toLocaleString()} separate events validate it. Events—not telemetry rows—are split, preventing messages from the same conjunction leaking across the split. The test data has no final labels, so its {test.eventsWithEligibleObservations.toLocaleString()} outputs are predictions only. Validation uses inverse-frequency class weights; balanced accuracy is {(modelEvaluation.balancedAccuracy * 100).toFixed(1)}%. Features include miss distance and risk-related telemetry, so this is a screening prototype, not operational maneuver guidance.</p>
         </div>
         <div className="model-reliability-note" role="note">
@@ -838,11 +1015,11 @@ function ModelEvaluation() {
   );
 }
 
-function Analytics() {
+function LegacyAnalytics() {
   return (
     <section className="analytics-section" id="analytics">
-      <div className="analytics-icon"><Icon name="spark" size={20} /></div>
-      <div className="analytics-copy"><span>EVENT-LEVEL CLASSIFICATION</span><h3>Validate collision-risk tiers</h3><p>Training and validation are grouped by event; test predictions remain unlabeled until final outcomes are supplied.</p></div>
+      <div className="analytics-icon"><Icon name="chart" size={20} /></div>
+      <div className="analytics-copy"><span>MODEL PERFORMANCE</span><h3>Review collision-risk tiers</h3><p>Training and validation are grouped by event; test predictions remain unlabeled until final outcomes are supplied.</p></div>
       <div className="analytics-stat"><strong>{datasetSummary.splits.train.featureColumns}</strong><span>input features</span></div>
       <div className="analytics-stat"><strong>3</strong><span>risk tiers</span></div>
       <button className="analytics-action" type="button" onClick={() => document.getElementById("datasets")?.scrollIntoView({ behavior: "smooth" })}>Review dataset <Icon name="arrow" size={15} /></button>
@@ -850,46 +1027,669 @@ function Analytics() {
   );
 }
 
-function App() {
-  const [selectedEvent, setSelectedEvent] = useState(events[0]);
-  const [scheduled, setScheduled] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return "—";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${value.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
+function DatasetUpload({ datasets, uploadStates, onUpload, onClear }) {
+  const splits = [
+    { key: "train", label: "Training dataset", description: "Upload the CSV used to fit your model." },
+    { key: "test", label: "Test dataset", description: "Upload the held-out CSV used to evaluate your model." },
+  ];
 
   return (
-    <div className="app-shell" id="overview">
-      <Sidebar />
+    <section className="upload-page">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">YOUR FILES · LOCAL PROCESSING</span><h2>Upload training and test data</h2></div>
+      </div>
+      <p className="upload-intro">The bundled training and test files load automatically. Choose a replacement if needed; CSV parsing runs locally in this browser.</p>
+      <div className="upload-dataset-grid">
+        {splits.map(({ key, label, description }) => {
+          const dataset = datasets[key];
+          const state = uploadStates[key];
+          return (
+            <article className="upload-dataset-card" key={key}>
+              <span className="upload-dataset-icon"><Icon name={key === "train" ? "chart" : "shield"} size={19} /></span>
+              <h3>{label}</h3>
+              <p>{description}</p>
+              {dataset ? (
+                <div className="uploaded-file-summary" role="status">
+                  <strong>{dataset.fileName}</strong>
+                  <span>{dataset.rows.toLocaleString()} rows · {dataset.columns} columns · {formatBytes(dataset.size)}</span>
+                </div>
+              ) : (
+                <div className="upload-prompt">No {key === "train" ? "training" : "test"} file selected</div>
+              )}
+              {state?.status === "reading" && (
+                <div className="upload-progress" role="status">
+                  <span>Reading CSV · {Math.round(state.progress * 100)}%</span>
+                  <progress max="1" value={state.progress} />
+                </div>
+              )}
+              {state?.error && <div className="csv-import-message error" role="alert">{state.error}</div>}
+              <div className="upload-dataset-actions">
+                <label className="csv-upload-button">
+                  <Icon name="plus" size={15} />{dataset ? "Replace file" : "Choose CSV"}
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    aria-label={`Choose ${key === "train" ? "training" : "test"} CSV`}
+                    disabled={state?.status === "reading"}
+                    onChange={(event) => {
+                      const [file] = event.target.files ?? [];
+                      event.target.value = "";
+                      if (file) onUpload(key, file);
+                    }}
+                  />
+                </label>
+                {dataset && <button className="clear-upload-button" type="button" disabled={state?.status === "reading"} onClick={() => onClear(key)}>Remove</button>}
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      <div className="csv-format-help">CSV headers are read from the first row. The viewer shows up to six preview rows and calculates risk statistics when a <code>risk</code> or <code>final_risk_log10_pc</code> column is present.</div>
+    </section>
+  );
+}
+
+function DatasetPage({ label, dataset, onNavigate }) {
+  if (!dataset) {
+    return (
+      <section className="dataset-empty-state">
+        <span className="help-intro-icon"><Icon name="download" size={20} /></span>
+        <h2>No {label.toLowerCase()} uploaded</h2>
+        <p>This dataset is not currently in the dashboard. The bundled original loads when the page starts; you can also select a replacement.</p>
+        <button type="button" className="evaluator-submit" onClick={() => onNavigate("#upload")}>Upload data</button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="dataset-section">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">UPLOADED FILE</span><h2>{label}</h2></div>
+        <span className="dataset-source-note">{dataset.fileName} · {formatBytes(dataset.size)}</span>
+      </div>
+      <div className="dataset-panel uploaded-dataset-panel">
+        <div className="dataset-facts">
+          <article><span>Data rows</span><strong>{dataset.rows.toLocaleString()}</strong><small>Valid-width rows</small></article>
+          <article><span>Columns</span><strong>{dataset.columns.toLocaleString()}</strong><small>From uploaded CSV</small></article>
+          <article><span>Rows skipped</span><strong>{dataset.invalidRows.toLocaleString()}</strong><small>Column count mismatch</small></article>
+          <article><span>Risk values</span><strong>{dataset.risk?.count.toLocaleString() ?? "—"}</strong><small>{dataset.risk ? "Finite numeric values" : "No risk column found"}</small></article>
+        </div>
+        {dataset.risk && (
+          <div className="uploaded-risk-stats">
+            <span>Risk range <strong>{formatRaw(dataset.risk.min)} to {formatRaw(dataset.risk.max)}</strong></span>
+            <span>Risk mean <strong>{formatRaw(dataset.risk.mean)}</strong></span>
+          </div>
+        )}
+        <div className="uploaded-preview-heading"><strong>First {dataset.previewRows.length} data rows</strong><span>Preview only · original file is unchanged</span></div>
+        <div className="dataset-table-wrap">
+          <table className="dataset-table uploaded-preview-table">
+            <thead><tr>{dataset.headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
+            <tbody>{dataset.previewRows.map((row, rowIndex) => (
+              <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{cell || "—"}</td>)}</tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatCollisionProbability(probability) {
+  if (!Number.isFinite(probability)) return "—";
+  const percent = probability * 100;
+  if (percent <= 0) return "0%";
+  if (percent >= 0.01) return `${percent.toFixed(2)}%`;
+  const digits = Math.min(Math.ceil(-Math.log10(percent)) + 2, 14);
+  return `${percent.toFixed(digits)}%`;
+}
+
+function EncounterDashboard({ datasets, selectedSplit, setSelectedSplit, selectedEventId, setSelectedEventId }) {
+  const activeSplit = datasets[selectedSplit] ? selectedSplit : datasets.train ? "train" : "test";
+  const dataset = datasets[activeSplit];
+  const rankedEncounters = dataset?.topEncounters ?? [];
+  const encounter = rankedEncounters.find((item) => item.eventId === selectedEventId) ?? rankedEncounters[0];
+  const encounterRank = rankedEncounters.indexOf(encounter) + 1;
+  const trajectory = encounter?.trajectory ?? [];
+  const chart = { width: 620, height: 270, left: 52, right: 598, top: 24, bottom: 220 };
+  const closestObservation = encounter ? {
+    relativeT: encounter.closestRelativeT,
+    relativeN: encounter.closestRelativeN,
+  } : null;
+  const extentPoints = closestObservation &&
+    Number.isFinite(closestObservation.relativeT) &&
+    Number.isFinite(closestObservation.relativeN)
+    ? [...trajectory, closestObservation]
+    : trajectory;
+  const tValues = extentPoints.map((point) => point.relativeT);
+  const nValues = extentPoints.map((point) => point.relativeN);
+  const tMin = Math.min(...tValues);
+  const tMax = Math.max(...tValues);
+  const nMin = Math.min(...nValues);
+  const nMax = Math.max(...nValues);
+  const tRange = tMax - tMin || 1;
+  const nRange = nMax - nMin || 1;
+  const chartPoints = trajectory.map((point) => ({
+    ...point,
+    x: chart.left + ((point.relativeT - tMin) / tRange) * (chart.right - chart.left),
+    y: chart.bottom - ((point.relativeN - nMin) / nRange) * (chart.bottom - chart.top),
+  }));
+  const closestPoint = closestObservation &&
+    Number.isFinite(closestObservation.relativeT) &&
+    Number.isFinite(closestObservation.relativeN)
+    ? {
+        x: chart.left + ((closestObservation.relativeT - tMin) / tRange) * (chart.right - chart.left),
+        y: chart.bottom - ((closestObservation.relativeN - nMin) / nRange) * (chart.bottom - chart.top),
+      }
+    : null;
+  const closestEncounter = dataset?.closestEncounter;
+
+  return (
+    <section className="encounter-dashboard">
+      <header className="encounter-dashboard-heading">
+        <div>
+          <span className="panel-eyebrow">OBSERVED CSV TELEMETRY · NOT A PREDICTION</span>
+          <h2>Relative encounter trajectory</h2>
+        </div>
+        <div className="encounter-split-tabs" role="group" aria-label="Select trajectory dataset">
+          {["train", "test"].map((split) => (
+            <button
+              type="button"
+              key={split}
+              className={activeSplit === split ? "selected" : ""}
+              aria-pressed={selectedSplit === split}
+              disabled={!datasets[split]}
+              onClick={() => { setSelectedSplit(split); setSelectedEventId(null); }}
+            >
+              {split === "train" ? "Training" : "Test"}
+            </button>
+          ))}
+        </div>
+      </header>
+      {encounter ? (
+        <div className="encounter-dashboard-body">
+          <div className="encounter-trajectory">
+            <div className="encounter-chart-caption">
+              <span>Event {encounter.eventId} · relative position plane</span>
+              <span>{trajectory.length} observed positions</span>
+            </div>
+            {chartPoints.length > 1 ? (
+              <div className="encounter-chart-scroll">
+                <svg className="encounter-chart" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`Observed relative trajectory for event ${encounter.eventId}`}>
+                  {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+                    const x = chart.left + fraction * (chart.right - chart.left);
+                    const y = chart.bottom - fraction * (chart.bottom - chart.top);
+                    return (
+                      <g className="encounter-grid" key={fraction}>
+                        <line x1={x} y1={chart.top} x2={x} y2={chart.bottom} />
+                        <line x1={chart.left} y1={y} x2={chart.right} y2={y} />
+                        <text x={x} y={chart.bottom + 18} textAnchor="middle">{formatRaw((tMin + tRange * fraction) / 1000)}</text>
+                        <text x={chart.left - 8} y={y + 3} textAnchor="end">{formatRaw((nMin + nRange * fraction) / 1000)}</text>
+                      </g>
+                    );
+                  })}
+                  <line className="encounter-axis" x1={chart.left} y1={chart.bottom} x2={chart.right} y2={chart.bottom} />
+                  <line className="encounter-axis" x1={chart.left} y1={chart.top} x2={chart.left} y2={chart.bottom} />
+                  <polyline className="encounter-path" points={chartPoints.map(({ x, y }) => `${x},${y}`).join(" ")} />
+                  {chartPoints.map((point, index) => (
+                    <circle
+                      className="encounter-point"
+                      key={`${point.timeToTcaDays}-${index}`}
+                      cx={point.x}
+                      cy={point.y}
+                      r="3.2"
+                    >
+                      <title>{`TCA ${formatRaw(point.timeToTcaDays)} days · miss ${formatRaw(point.missDistanceMeters)} m`}</title>
+                    </circle>
+                  ))}
+                  {closestPoint && (
+                    <circle className="encounter-point closest" cx={closestPoint.x} cy={closestPoint.y} r="6">
+                      <title>Closest recorded approach · {formatRaw(encounter.minMissDistanceMeters)} m</title>
+                    </circle>
+                  )}
+                  <text className="encounter-axis-label" x={(chart.left + chart.right) / 2} y="262" textAnchor="middle">Along-track position (km)</text>
+                  <text className="encounter-axis-label" transform={`translate(14 ${(chart.top + chart.bottom) / 2}) rotate(-90)`} textAnchor="middle">Cross-track position (km)</text>
+                </svg>
+              </div>
+            ) : (
+              <div className="encounter-no-track">Relative-position columns are unavailable for this file.</div>
+            )}
+            <div className="encounter-chart-legend">
+              <span><i className="trajectory-legend-line" /> Observed relative trajectory</span>
+              <span><i className="trajectory-legend-point" /> Closest recorded approach</span>
+            </div>
+          </div>
+          <aside className="encounter-score-panel">
+            <div className="encounter-event-label">{dataset?.ranking === "official-tier" ? `OFFICIAL RANK #${encounterRank}` : encounterRank === 1 ? "HIGHEST RECORDED RISK" : `RISK RANK #${encounterRank}`}</div>
+            <div className="encounter-pick-row">
+              <strong className="encounter-event-id">Event {encounter.eventId}</strong>
+              {encounter.label && (
+                <span className={`tier-badge tier-${encounter.label.tier.toLowerCase()}`}>{encounter.label.tier}</span>
+              )}
+            </div>
+            <div className="encounter-score">
+              <span>Peak collision probability</span>
+              <strong>{formatCollisionProbability(encounter.peakCollisionProbability)}</strong>
+              <small>from max observed log10(Pc) {formatRaw(encounter.peakRiskLog10Pc)}</small>
+            </div>
+            <div className="encounter-score">
+              <span>Closest recorded miss</span>
+              <strong>{formatRaw(encounter.minMissDistanceMeters)} <small>m</small></strong>
+              {Number.isFinite(encounter.closestTimeToTcaDays) && (
+                <small>{formatRaw(encounter.closestTimeToTcaDays * 24)} h to TCA</small>
+              )}
+            </div>
+            {encounter.label && (
+              <p className="encounter-final-note">
+                Official final message: {formatRaw(encounter.label.finalMissDistanceMeters)} m miss · log10(Pc) {formatRaw(encounter.label.finalRiskLog10Pc)} · {formatRaw(encounter.label.finalTimeToTcaDays)} d to TCA
+              </p>
+            )}
+            {Number.isFinite(encounter.relativeSpeedMetersPerSecond) && (
+              <div className="encounter-score compact">
+                <span>Relative speed</span>
+                <strong>{formatRaw(encounter.relativeSpeedMetersPerSecond / 1000)} <small>km/s</small></strong>
+              </div>
+            )}
+            {closestEncounter && (
+              <p className="closest-event-note">
+                Dataset closest approach: Event {closestEncounter.eventId} · {formatRaw(closestEncounter.minMissDistanceMeters)} m
+              </p>
+            )}
+                      <nav className="encounter-rank-nav" aria-label="Browse ranked events">
+              <button type="button" disabled={encounterRank <= 1} onClick={() => setSelectedEventId(rankedEncounters[encounterRank - 2].eventId)}>← Previous</button>
+              <span>{encounterRank} of {rankedEncounters.length}</span>
+              <button type="button" disabled={encounterRank >= rankedEncounters.length} onClick={() => setSelectedEventId(rankedEncounters[encounterRank].eventId)}>Next →</button>
+            </nav>
+          </aside>
+        </div>
+      ) : (
+        <div className="encounter-no-track">
+          This CSV has no supported event, risk, miss-distance, and relative-position columns for a trajectory view.
+        </div>
+      )}
+      <p className="encounter-data-note">
+        Visualization uses observed <code>relative_position_t</code> and <code>relative_position_n</code> values (km). Pc is calculated as <code>10^risk</code>; miss distance is the minimum recorded value for the event. These are dataset observations, not live orbit predictions or maneuver guidance.
+      </p>
+    </section>
+  );
+}
+
+function DatasetAnalytics({ datasets, onNavigate }) {
+  const uploaded = Object.entries(datasets).filter(([, dataset]) => dataset);
+  if (uploaded.length === 0) {
+    return <DatasetPage label="Dataset analysis" dataset={null} onNavigate={onNavigate} />;
+  }
+
+  return (
+    <section className="dataset-section">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">UPLOADED FILES ONLY</span><h2>Dataset analysis</h2></div>
+      </div>
+      <div className="uploaded-analysis-grid">
+        {uploaded.map(([split, dataset]) => (
+          <article className="uploaded-analysis-card" key={split}>
+            <span>{split === "train" ? "TRAINING" : "TEST"}</span>
+            <strong>{dataset.rows.toLocaleString()}</strong>
+            <small>rows · {dataset.columns} columns</small>
+            <p>{dataset.fileName} · {formatBytes(dataset.size)}</p>
+            {dataset.risk && <p>Risk min / mean / max: {formatRaw(dataset.risk.min)} / {formatRaw(dataset.risk.mean)} / {formatRaw(dataset.risk.max)}</p>}
+            <button type="button" className="help-open-link" onClick={() => onNavigate(split === "train" ? "#training" : "#test")}>View uploaded rows<Icon name="arrow" size={14} /></button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ModelEvaluation({ datasets, onNavigate }) {
+  const ready = Boolean(datasets.train && datasets.test);
+  return (
+    <section className="model-section">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">MODEL STATUS</span><h2>Model evaluation</h2></div>
+      </div>
+      <div className="model-panel uploaded-model-panel">
+        <div className="model-status-icon"><Icon name={ready ? "shield" : "download"} size={22} /></div>
+        <div>
+          <strong>{ready ? "Training and test files are ready" : "Upload your training and test files"}</strong>
+          <p>{ready
+            ? "Both files are available for inspection. This website displays uploaded data but does not train a model or generate predictions."
+            : "No model metrics or predictions are provided. The bundled CSVs load automatically for inspection."}</p>
+          <div className="model-file-readiness">
+            <span className={datasets.train ? "ready" : ""}>Training file {datasets.train ? `· ${datasets.train.rows.toLocaleString()} rows` : "· not uploaded"}</span>
+            <span className={datasets.test ? "ready" : ""}>Test file {datasets.test ? `· ${datasets.test.rows.toLocaleString()} rows` : "· not uploaded"}</span>
+          </div>
+        </div>
+        {!ready && <button type="button" className="evaluator-submit" onClick={() => onNavigate("#upload")}>Upload data</button>}
+      </div>
+    </section>
+  );
+}
+
+function Analytics({ datasets, onNavigate }) {
+  return <DatasetAnalytics datasets={datasets} onNavigate={onNavigate} />;
+}
+
+function HelpGuide({ onNavigate }) {
+  const guides = [
+    {
+      href: "#overview",
+      icon: "grid",
+      title: "Overview",
+      purpose: "Shows the highest recorded risk, miss distance, and relative trajectory from the bundled training and test CSVs.",
+      steps: ["Switch between training and test to inspect each split's highest-risk event.", "Compare the peak observed Pc, closest recorded miss, and position trace; these are telemetry, not predictions."],
+    },
+    {
+      href: "#upload",
+      icon: "download",
+      title: "Upload data",
+      purpose: "Shows the automatically loaded datasets and lets you replace either CSV.",
+      steps: ["The bundled files are loaded when the app starts.", "Choose a replacement or remove the current dataset; refresh restores the bundled file."],
+    },
+    {
+      href: "#training",
+      icon: "chart",
+      title: "Training data",
+      purpose: "Shows basic statistics and a small preview of the bundled or replacement training CSV.",
+      steps: ["The bundled training CSV loads automatically.", "Use Upload data to replace it; only its summary and preview are displayed."],
+    },
+    {
+      href: "#test",
+      icon: "chart",
+      title: "Test data",
+      purpose: "Shows basic statistics and a small preview of the bundled or replacement test CSV.",
+      steps: ["The bundled test CSV loads automatically.", "Risk statistics appear only if the file has a numeric risk column."],
+    },
+    {
+      href: "#datasets",
+      icon: "chart",
+      title: "Dataset analysis",
+      purpose: "Compares the loaded files by row count, column count and risk summary.",
+      steps: ["Both bundled files load automatically.", "Open a file's detailed view to inspect its columns and preview rows."],
+    },
+    {
+      href: "#model",
+      icon: "chart",
+      title: "Model evaluation",
+      purpose: "Shows whether the bundled files are available. This website does not train a model or create predictions.",
+      steps: ["Both files load automatically and are available for inspection.", "No accuracy scores are shown because model evaluation is not implemented."],
+    },
+    {
+      href: "#analytics",
+      icon: "chart",
+      title: "Analytics",
+      purpose: "Summarizes the training and test files currently loaded.",
+      steps: ["Review the counts and risk statistics for each file.", "Removing a file clears it for this session; refresh restores the bundled original."],
+    },
+  ];
+
+  return (
+    <section className="help-page" aria-labelledby="help-title">
+      <div className="section-heading help-heading">
+        <div><span className="panel-eyebrow">NEW TO ORBITAL?</span><h2 id="help-title">A guide to the dashboard</h2></div>
+      </div>
+      <div className="help-intro">
+        <span className="help-intro-icon"><Icon name="help" size={20} /></span>
+        <div>
+          <strong>Upload your own data to get started</strong>
+          <p>The real training and test CSVs are bundled with the app and loaded automatically. Parsing and summaries happen locally in your browser.</p>
+        </div>
+      </div>
+      <div className="help-grid">
+        {guides.map((guide) => (
+          <article className="help-card" key={guide.href}>
+            <div className="help-card-heading"><span><Icon name={guide.icon} size={17} /></span><h3>{guide.title}</h3></div>
+            <p>{guide.purpose}</p>
+            <ol>{guide.steps.map((step) => <li key={step}>{step}</li>)}</ol>
+            <button type="button" className="help-open-link" onClick={() => onNavigate(guide.href)}>
+              Open {guide.title}<Icon name="arrow" size={14} />
+            </button>
+          </article>
+        ))}
+      </div>
+      <aside className="help-safety-note">
+        <Icon name="shield" size={17} />
+        <p><strong>Privacy:</strong> The bundled CSVs and any replacements are processed locally in this browser. Removing a bundled dataset clears the current view; refreshing restores the bundled original files.</p>
+      </aside>
+    </section>
+  );
+}
+
+function App() {
+  const [datasets, setDatasets] = useState({ train: null, test: null });
+  const [uploadStates, setUploadStates] = useState({ train: null, test: null });
+  const [isLoadingBundledData, setIsLoadingBundledData] = useState(true);
+  const [overviewSplit, setOverviewSplit] = useState("train");
+  const [overviewEventId, setOverviewEventId] = useState(null);
+  const labelsRef = useRef(null);
+  const [activeHref, setActiveHref] = useState(() =>
+    navigation.some((item) => item.href === window.location.hash)
+      ? window.location.hash
+      : "#overview",
+  );
+  const activeItem = navigation.find((item) => item.href === activeHref) ?? navigation[0];
+
+  useEffect(() => {
+    function syncActiveView() {
+      setActiveHref(
+        navigation.some((item) => item.href === window.location.hash)
+          ? window.location.hash
+          : "#overview",
+      );
+    }
+
+    window.addEventListener("hashchange", syncActiveView);
+    window.addEventListener("popstate", syncActiveView);
+    return () => {
+      window.removeEventListener("hashchange", syncActiveView);
+      window.removeEventListener("popstate", syncActiveView);
+    };
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const bundledDatasets = [
+      { split: "train", url: "/data/train_data.csv" },
+      { split: "test", url: "/data/test_data.csv" },
+    ];
+
+    setUploadStates((current) => ({
+      ...current,
+      train: { status: "reading", progress: 0, error: null },
+      test: { status: "reading", progress: 0, error: null },
+    }));
+
+    async function loadBundledData() {
+      let trainLabels = null;
+      try {
+        const labelResponse = await fetch("/data/train_event_labels.csv", { signal: controller.signal });
+        if (labelResponse.ok) trainLabels = parseEventLabels(await labelResponse.text());
+      } catch {
+        trainLabels = null;
+      }
+      labelsRef.current = trainLabels;
+
+      await Promise.all(bundledDatasets.map(async ({ split, url }) => {
+        try {
+          const response = await fetch(url, { signal: controller.signal });
+          if (!response.ok || !response.body) {
+            throw new Error(`Could not load ${split} data (${response.status}).`);
+          }
+          const size = Number(response.headers.get("content-length")) || 0;
+          const dataset = await summarizeCsvStream({
+            name: url.split("/").at(-1),
+            size,
+            stream: () => response.body,
+          }, (progress) => {
+            if (!controller.signal.aborted) {
+              setUploadStates((current) => ({
+                ...current,
+                [split]: { status: "reading", progress, error: null },
+              }));
+            }
+          }, split === "train" && trainLabels ? trainLabels : {});
+          if (!controller.signal.aborted) {
+            setDatasets((current) => ({ ...current, [split]: dataset }));
+            setUploadStates((current) => ({ ...current, [split]: null }));
+          }
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setUploadStates((current) => ({
+              ...current,
+              [split]: {
+                status: "error",
+                progress: 0,
+                error: error instanceof Error ? error.message : `Could not load ${split} data.`,
+              },
+            }));
+          }
+        }
+      }));
+
+      if (!controller.signal.aborted) setIsLoadingBundledData(false);
+    }
+
+    loadBundledData();
+    return () => controller.abort();
+  }, []);
+
+  function navigate(href) {
+    if (window.location.hash !== href) {
+      window.history.pushState(null, "", href);
+    }
+    setActiveHref(href);
+    window.scrollTo(0, 0);
+  }
+
+  async function uploadDataset(split, file) {
+    setUploadStates((current) => ({
+      ...current,
+      [split]: { status: "reading", progress: 0, error: null },
+    }));
+
+    try {
+      const dataset = await summarizeCsvFile(file, (progress) => {
+        setUploadStates((current) => ({
+          ...current,
+          [split]: { status: "reading", progress, error: null },
+        }));
+      }, split === "train" && labelsRef.current ? labelsRef.current : {});
+      setDatasets((current) => ({ ...current, [split]: dataset }));
+      setUploadStates((current) => ({ ...current, [split]: null }));
+    } catch (error) {
+      setUploadStates((current) => ({
+        ...current,
+        [split]: {
+          status: "error",
+          progress: 0,
+          error: error instanceof Error ? error.message : "The CSV could not be read.",
+        },
+      }));
+    }
+  }
+
+  function clearDataset(split) {
+    setDatasets((current) => ({ ...current, [split]: null }));
+    setUploadStates((current) => ({ ...current, [split]: null }));
+  }
+
+  const isOverview = activeHref === "#overview";
+  const hasUploadedData = Boolean(datasets.train || datasets.test);
+
+  return (
+    <div className="app-shell">
+      <Sidebar activeHref={activeHref} onNavigate={navigate} />
       <main className="main-content">
-        <Topbar query={searchTerm} onQueryChange={setSearchTerm} />
-        <div className="dashboard-content">
-          <section className="page-heading">
-            <div><div className="greeting">AI-ASSISTED COLLISION AVOIDANCE <span className="greeting-dot" /> TRAINING + TEST DATA</div><h1>Safer satellite orbits <span>✦</span></h1><p>Explore the supplied conjunction dataset and the signals an AI risk model could learn from.</p></div>
-            <button type="button" className="export-button" onClick={() => window.print()}><Icon name="download" size={16} /> Export report</button>
-          </section>
-          <section className="metrics-grid" aria-label="Supplied dataset overview">
-            <MetricCard label="Eligible training events" value={eventModelSummary.training.eligibleEvents.toLocaleString()} detail={`${eventModelSummary.unusableLabelEvents.toLocaleString()} lack messages ≥2 days out`} icon="satellite" tone="blue" />
-            <MetricCard label="Test event predictions" value={eventModelSummary.test.eventsWithEligibleObservations.toLocaleString()} detail="Final labels unavailable" icon="orbit" tone="teal" />
-            <MetricCard label="Validation critical recall" value={`${(eventModelSummary.validation.metrics.classMetrics.critical.recall * 100).toFixed(1)}%`} detail="Grouped by event ID" icon="crosshair" tone="amber" />
-            <MetricCard label="Validation balanced accuracy" value={`${(eventModelSummary.validation.metrics.balancedAccuracy * 100).toFixed(1)}%`} detail="Internal held-out events" icon="shield" tone="green" />
-          </section>
-          <RiskEvaluator />
-          <CsvScreening />
-          <ModelEvaluation />
-          <DatasetAnalytics />
-          <section className="orbital-section">
-            <div className="section-heading orbital-heading">
-                <div><span className="panel-eyebrow">ILLUSTRATIVE DEMO · NOT FROM CSV DATA</span><h2>Orbital overview</h2></div>
-                <div className="map-time"><span className="demo-dot" /> DEMO DATA <span>·</span> 12:24 UTC</div>
-            </div>
-            <div className="orbital-layout">
-              <div className="map-card"><OrbitMap selectedEvent={selectedEvent} /></div>
-              <RiskSummary event={selectedEvent} onSchedule={() => setScheduled(!scheduled)} scheduled={scheduled} />
-            </div>
-          </section>
-          <div className="demo-section-label">Demo-only spacecraft and conjunction examples below are illustrative and are not derived from the supplied datasets.</div>
-          <Conjunctions selectedEvent={selectedEvent} onSelect={(event) => { setSelectedEvent(event); setScheduled(false); }} searchTerm={searchTerm} />
-          <FleetHealth />
-          <Analytics />
-          <footer className="dashboard-footer"><span>© 2026 Orbital Systems</span><span>Illustrative data · not live telemetry <i className="demo-dot" /></span><a href="#overview">Prototype environment</a></footer>
+        <Topbar activeLabel={activeItem.label} />
+        <div className={`dashboard-content ${isOverview ? "dashboard-overview" : "dashboard-detail"}`}>
+          {isOverview ? (
+            <>
+              <section className="page-heading">
+                <div><div className="greeting">LOCAL CSV WORKSPACE <span className="greeting-dot" /> YOUR DATA ONLY</div><h1>Training &amp; test data</h1><p>Your training and test files load automatically; replace them any time.</p></div>
+                <button type="button" className="export-button" onClick={() => navigate("#upload")}><Icon name="plus" size={16} /> Upload data</button>
+              </section>
+              {!isLoadingBundledData && Object.values(uploadStates).some((state) => state?.error) && (
+                <p className="bundled-data-error overview-load-error" role="alert">
+                  {Object.values(uploadStates).find((state) => state?.error)?.error}
+                  {" "}Open Upload data to retry or choose another CSV.
+                </p>
+              )}
+              {hasUploadedData ? (
+                <>
+                  <section className="metrics-grid" aria-label="Uploaded dataset summary">
+                    <MetricCard label="Training encounters" value={datasets.train?.encounterCount?.toLocaleString() ?? "—"} detail={datasets.train?.fileName ?? "Not loaded"} icon="orbit" tone="blue" />
+                    <MetricCard label="Training peak Pc" value={formatCollisionProbability(datasets.train?.peakEncounter?.peakCollisionProbability)} detail={datasets.train ? `Event ${datasets.train.peakEncounter?.eventId ?? "—"}` : "Not loaded"} icon="crosshair" tone="amber" />
+                    <MetricCard label="Test encounters" value={datasets.test?.encounterCount?.toLocaleString() ?? "—"} detail={datasets.test?.fileName ?? "Not loaded"} icon="orbit" tone="teal" />
+                    <MetricCard label="Test peak Pc" value={formatCollisionProbability(datasets.test?.peakEncounter?.peakCollisionProbability)} detail={datasets.test ? `Event ${datasets.test.peakEncounter?.eventId ?? "—"}` : "Not loaded"} icon="crosshair" tone="green" />
+                  </section>
+                  <div className="overview-data-row">
+                    <EncounterDashboard datasets={datasets} selectedSplit={overviewSplit} setSelectedSplit={setOverviewSplit} selectedEventId={overviewEventId} setSelectedEventId={setOverviewEventId} />
+                    <OrbitGeometryView encounter={(() => {
+                      const ranked = datasets[datasets[overviewSplit] ? overviewSplit : datasets.train ? "train" : "test"]?.topEncounters ?? [];
+                      return ranked.find((item) => item.eventId === overviewEventId) ?? ranked[0];
+                    })()} />
+                  </div>
+                </>
+              ) : isLoadingBundledData ? (
+                <section className="overview-loading-state" role="status">
+                  <div className="overview-loading-copy">
+                    <span className="overview-empty-icon"><Icon name="orbit" size={25} /></span>
+                    <h2>Loading your datasets</h2>
+                    <p>Your training and test files are being read locally. Large files may take a moment.</p>
+                    <div className="overview-loading-progress">
+                      {["train", "test"].map((split) => (
+                        <div key={split}>
+                          <span>{split === "train" ? "Training data" : "Test data"}</span>
+                          <progress max="1" value={uploadStates[split]?.progress ?? 0} />
+                          <small>{Math.round((uploadStates[split]?.progress ?? 0) * 100)}%</small>
+                        </div>
+                      ))}
+                    </div>
+                    {Object.values(uploadStates).some((state) => state?.error) && (
+                      <p className="bundled-data-error" role="alert">
+                        {Object.values(uploadStates).find((state) => state?.error)?.error}
+                        {" "}Use Upload data to retry with your CSV files.
+                      </p>
+                    )}
+                  </div>
+                  <EarthOrbitIllustration />
+                </section>
+              ) : (
+                <section className="overview-empty-state">
+                  <div className="overview-empty-copy">
+                    <span className="overview-empty-icon"><Icon name="download" size={25} /></span>
+                    <h2>No data uploaded</h2>
+                    <p>The bundled CSVs could not be loaded. Choose files manually or try refreshing the app.</p>
+                    <button type="button" className="evaluator-submit" onClick={() => navigate("#upload")}>Choose your files</button>
+                    <small>Large CSV files are processed locally in your browser.</small>
+                  </div>
+                  <EarthOrbitIllustration />
+                </section>
+              )}
+            </>
+          ) : (
+            <>
+              {activeHref === "#upload" && <DatasetUpload datasets={datasets} uploadStates={uploadStates} onUpload={uploadDataset} onClear={clearDataset} />}
+              {activeHref === "#training" && <DatasetPage label="Training data" dataset={datasets.train} onNavigate={navigate} />}
+              {activeHref === "#test" && <DatasetPage label="Test data" dataset={datasets.test} onNavigate={navigate} />}
+              {activeHref === "#datasets" && <DatasetAnalytics datasets={datasets} onNavigate={navigate} />}
+              {activeHref === "#model" && <ModelEvaluation datasets={datasets} onNavigate={navigate} />}
+              {activeHref === "#analytics" && <Analytics datasets={datasets} onNavigate={navigate} />}
+              {activeHref === "#help" && <HelpGuide onNavigate={navigate} />}
+              <footer className="dashboard-footer"><span>CSV data is processed locally in this browser.</span><a href="#overview" onClick={(event) => { event.preventDefault(); navigate("#overview"); }}>Back to overview</a></footer>
+            </>
+          )}
         </div>
       </main>
       <div className="search-bridge" aria-hidden="true" />
