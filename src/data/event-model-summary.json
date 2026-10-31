@@ -1,0 +1,228 @@
+{
+  "source": "Workbook event labels and supplied train/test telemetry CSV files.",
+  "labelEvents": 13154,
+  "unusableLabelEvents": 1212,
+  "training": {
+    "eligibleEvents": 11942,
+    "fitEvents": 9527,
+    "classCounts": {
+      "safe": 8946,
+      "elevated": 2162,
+      "critical": 834
+    },
+    "observationRule": "One latest observation per event with time_to_tca >= 2 days."
+  },
+  "validation": {
+    "split": "Deterministic stratified 80/20 split grouped by event_id.",
+    "metrics": {
+      "events": 2415,
+      "accuracy": 0.8045548654244307,
+      "balancedAccuracy": 0.7865890244886709,
+      "classMetrics": {
+        "safe": {
+          "actualEvents": 1793,
+          "predictedEvents": 1572,
+          "precision": 0.9694656488549618,
+          "recall": 0.8499721137757947,
+          "f1": 0.9057949479940564
+        },
+        "elevated": {
+          "actualEvents": 445,
+          "predictedEvents": 521,
+          "precision": 0.4836852207293666,
+          "recall": 0.5662921348314607,
+          "f1": 0.5217391304347827
+        },
+        "critical": {
+          "actualEvents": 177,
+          "predictedEvents": 322,
+          "precision": 0.5186335403726708,
+          "recall": 0.943502824858757,
+          "f1": 0.6693386773547094
+        }
+      },
+      "confusionMatrix": {
+        "safe": {
+          "safe": 1524,
+          "elevated": 261,
+          "critical": 8
+        },
+        "elevated": {
+          "safe": 46,
+          "elevated": 252,
+          "critical": 147
+        },
+        "critical": {
+          "safe": 2,
+          "elevated": 8,
+          "critical": 167
+        }
+      }
+    }
+  },
+  "test": {
+    "eventsWithEligibleObservations": 2167,
+    "finalLabelsAvailable": false,
+    "predictedTierCounts": {
+      "safe": 1275,
+      "elevated": 561,
+      "critical": 331
+    },
+    "topPredictions": [
+      {
+        "eventId": "1523",
+        "predictedTier": "critical",
+        "confidence": 0.8204329122782357,
+        "probabilities": {
+          "safe": 0.001136460727049916,
+          "elevated": 0.17843062699471446,
+          "critical": 0.8204329122782357
+        },
+        "timeToTcaDays": 2.1326654050925926,
+        "missDistanceMeters": 74
+      },
+      {
+        "eventId": "2003",
+        "predictedTier": "critical",
+        "confidence": 0.8153337541525132,
+        "probabilities": {
+          "safe": 0.0011672490017372314,
+          "elevated": 0.1834989968457496,
+          "critical": 0.8153337541525132
+        },
+        "timeToTcaDays": 2.433165787037037,
+        "missDistanceMeters": 105
+      },
+      {
+        "eventId": "207",
+        "predictedTier": "critical",
+        "confidence": 0.8127787273805186,
+        "probabilities": {
+          "safe": 0.001152844960764137,
+          "elevated": 0.18606842765871726,
+          "critical": 0.8127787273805186
+        },
+        "timeToTcaDays": 2.0618784259259257,
+        "missDistanceMeters": 162
+      },
+      {
+        "eventId": "852",
+        "predictedTier": "critical",
+        "confidence": 0.8119271608691254,
+        "probabilities": {
+          "safe": 0.0005102069830517414,
+          "elevated": 0.1875626321478228,
+          "critical": 0.8119271608691254
+        },
+        "timeToTcaDays": 2.2194104861111112,
+        "missDistanceMeters": 80
+      },
+      {
+        "eventId": "1690",
+        "predictedTier": "critical",
+        "confidence": 0.8073810608745413,
+        "probabilities": {
+          "safe": 0.020032678127810195,
+          "elevated": 0.17258626099764848,
+          "critical": 0.8073810608745413
+        },
+        "timeToTcaDays": 2.573209976851852,
+        "missDistanceMeters": 689
+      },
+      {
+        "eventId": "409",
+        "predictedTier": "critical",
+        "confidence": 0.8021647273561991,
+        "probabilities": {
+          "safe": 0.002310774731998899,
+          "elevated": 0.19552449791180204,
+          "critical": 0.8021647273561991
+        },
+        "timeToTcaDays": 4.067404930555557,
+        "missDistanceMeters": 279
+      },
+      {
+        "eventId": "1631",
+        "predictedTier": "critical",
+        "confidence": 0.8013637205093738,
+        "probabilities": {
+          "safe": 0.00535927523172643,
+          "elevated": 0.19327700425889988,
+          "critical": 0.8013637205093738
+        },
+        "timeToTcaDays": 2.0885928935185185,
+        "missDistanceMeters": 435
+      },
+      {
+        "eventId": "808",
+        "predictedTier": "critical",
+        "confidence": 0.7997083927163046,
+        "probabilities": {
+          "safe": 0.0014548430961703498,
+          "elevated": 0.19883676418752502,
+          "critical": 0.7997083927163046
+        },
+        "timeToTcaDays": 2.111355636574074,
+        "missDistanceMeters": 133
+      }
+    ]
+  },
+  "model": {
+    "algorithm": "standardized multinomial logistic regression",
+    "target": "final_tier",
+    "epochs": 160,
+    "classWeighting": "Inverse-frequency weights calculated from the fit split.",
+    "numericFeatures": [
+      "time_to_tca",
+      "miss_distance",
+      "relative_speed",
+      "relative_position_r",
+      "relative_position_t",
+      "relative_position_n",
+      "c_sigma_r",
+      "t_sigma_r",
+      "max_risk_estimate",
+      "f10",
+      "ap"
+    ],
+    "categoricalFeature": "c_object_type",
+    "objectTypes": [
+      "DEBRIS",
+      "PAYLOAD",
+      "ROCKET BODY",
+      "TBA",
+      "UNKNOWN"
+    ],
+    "imputation": "Missing numeric features use fit-split means.",
+    "transforms": {
+      "distanceSpeedAndSigma": "log1p(value / 1000)",
+      "relativePosition": "sign(value) * log1p(abs(value) / 1000)"
+    },
+    "numericMeans": [
+      2.847315052729045,
+      2.573383856664333,
+      2.2826926109843644,
+      -0.042523599930087336,
+      0.026778137035922526,
+      0.006129566863976499,
+      0.45720987203555713,
+      0.2003419616661037,
+      -6.38107344184629,
+      81.67977651183173,
+      9.028045574057844
+    ],
+    "numericScales": [
+      1.204127456624995,
+      1.042885492662155,
+      0.6331800738973443,
+      0.44675372882539355,
+      2.3144311883874384,
+      2.339581283099937,
+      1.6052445069724213,
+      1.4510263788528346,
+      1.004385131738429,
+      18.880989965332557,
+      8.895173067049013
+    ]
+  }
+}

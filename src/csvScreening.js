@@ -47,6 +47,26 @@ function normalizeHeader(header) {
   return header.trim().toLowerCase().replace(/[\s-]+/g, "_");
 }
 
+function findHeaderRow(rows) {
+  const probabilityHeaders = new Set(["pc", "risk", "final_risk_log10_pc"]);
+  const distanceHeaders = new Set([
+    "miss_distance",
+    "miss_distance_m",
+    "miss_distance_km",
+    "final_miss_distance_m",
+  ]);
+  const probabilityHeaderRow = rows.findIndex((row) => {
+    const headers = row.map(normalizeHeader);
+    return headers.some((header) => probabilityHeaders.has(header));
+  });
+  const completeHeaderRow = rows.findIndex((row) => {
+    const headers = row.map(normalizeHeader);
+    return headers.some((header) => probabilityHeaders.has(header)) &&
+      headers.some((header) => distanceHeaders.has(header));
+  });
+  return completeHeaderRow === -1 ? probabilityHeaderRow : completeHeaderRow;
+}
+
 function parseNumber(value, label) {
   if (value === undefined || value.trim() === "") {
     throw new Error(`${label} is missing.`);
@@ -70,11 +90,16 @@ export function screenCsvContent(content) {
 
   const rows = parseCsvRows(content.replace(/^\uFEFF/, ""));
   if (rows.length < 2) throw new Error("CSV must include a header and at least one data row.");
-  if (rows.length - 1 > 100_000) {
+  const headerRowIndex = findHeaderRow(rows);
+  if (headerRowIndex === -1) {
+    throw new Error("CSV needs a 'pc' probability column or a 'risk' log10(Pc) column.");
+  }
+  const dataRows = rows.slice(headerRowIndex + 1);
+  if (dataRows.length > 100_000) {
     throw new Error("CSV exceeds the 100,000-row screening limit. Split it into smaller CSV files.");
   }
 
-  const headers = rows[0].map((header) => header.trim());
+  const headers = rows[headerRowIndex].map((header) => header.trim());
   const normalizedHeaders = headers.map(normalizeHeader);
   const uniqueHeaders = new Set(normalizedHeaders);
   if (uniqueHeaders.size !== normalizedHeaders.length) {
@@ -86,9 +111,9 @@ export function screenCsvContent(content) {
     return index === -1 ? undefined : index;
   };
   const pcIndex = column("pc");
-  const riskIndex = column("risk");
+  const riskIndex = column("risk") ?? column("final_risk_log10_pc");
   const kmDistanceIndex = column("miss_distance_km");
-  const meterDistanceIndex = column("miss_distance_m");
+  const meterDistanceIndex = column("miss_distance_m") ?? column("final_miss_distance_m");
   const defaultDistanceIndex = column("miss_distance");
   const distanceIndexes = [kmDistanceIndex, meterDistanceIndex, defaultDistanceIndex];
 
@@ -104,8 +129,8 @@ export function screenCsvContent(content) {
   const screenedRows = [];
   const rejectedRows = [];
 
-  rows.slice(1).forEach((cells, rowIndex) => {
-    const csvRowNumber = rowIndex + 2;
+  dataRows.forEach((cells, rowIndex) => {
+    const csvRowNumber = headerRowIndex + rowIndex + 2;
     if (cells.length !== headers.length) {
       rejectedRows.push({
         rowNumber: csvRowNumber,

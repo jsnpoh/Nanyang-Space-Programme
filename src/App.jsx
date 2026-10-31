@@ -1,5 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import datasetSummary from "./data/dataset-summary.json";
+import eventModelSummary from "./data/event-model-summary.json";
 import { createScreenedCsv, screenCsvContent } from "./csvScreening.js";
 import { classifyCollisionRisk } from "./riskPolicy.js";
 import { riskTestCases } from "./riskTestCases.js";
@@ -99,6 +100,25 @@ function Brand() {
 }
 
 function Sidebar() {
+  const [activeHref, setActiveHref] = useState(() =>
+    navigation.some((item) => item.href === window.location.hash)
+      ? window.location.hash
+      : "#overview",
+  );
+
+  useEffect(() => {
+    function syncActiveLink() {
+      setActiveHref(
+        navigation.some((item) => item.href === window.location.hash)
+          ? window.location.hash
+          : "#overview",
+      );
+    }
+
+    window.addEventListener("hashchange", syncActiveLink);
+    return () => window.removeEventListener("hashchange", syncActiveLink);
+  }, []);
+
   return (
     <aside className="sidebar">
       <Brand />
@@ -109,8 +129,14 @@ function Sidebar() {
       </div>
       <div className="side-label">WORKSPACE</div>
       <nav className="side-nav" aria-label="Main navigation">
-        {navigation.map((item, index) => (
-          <a className={`side-link ${index === 0 ? "active" : ""}`} href={item.href} key={item.label}>
+        {navigation.map((item) => (
+          <a
+            className={`side-link ${activeHref === item.href ? "active" : ""}`}
+            href={item.href}
+            key={item.label}
+            aria-current={activeHref === item.href ? "page" : undefined}
+            onClick={() => setActiveHref(item.href)}
+          >
             <Icon name={item.icon} size={17} />
             <span>{item.label}</span>
             {item.count && <span className="nav-count">{item.count}</span>}
@@ -351,15 +377,14 @@ function DatasetAnalytics() {
   const dataset = datasetSummary.splits[selectedSplit];
   const riskStats = dataset.stats.risk;
   const previewRows = selectedSplit === "test"
-    ? dataset.topPredictions.map((record) => ({
-        row: record.row,
+    ? eventModelSummary.test.topPredictions.map((record) => ({
         eventId: record.eventId,
-        predictedRisk: record.predictedRisk,
-        actualRisk: record.actualRisk,
-        predictedPc: record.predictedPc,
+        confidence: record.confidence,
+        actualRisk: null,
+        predictedPc: null,
         missDistance: record.missDistanceMeters,
-        relativeSpeed: record.relativeSpeed,
         predictedTier: record.predictedTier,
+        timeToTcaDays: record.timeToTcaDays,
       }))
     : dataset.topRiskObservations.map((record) => ({
         row: record.row,
@@ -415,7 +440,7 @@ function DatasetAnalytics() {
         </div>
 
         <div className="tier-summary">
-          <div className="tier-summary-heading"><span>Rule-based labels</span><small>Telemetry rows · not unique events</small></div>
+          <div className="tier-summary-heading"><span>Rule-based labels</span><small>{selectedSplit === "test" ? "Current message values · not final event outcomes" : "Telemetry rows · not unique events"}</small></div>
           {["safe", "elevated", "critical"].map((tier) => (
             <div className={`tier-summary-item ${tier}`} key={tier}>
               <span><i />{tier}</span>
@@ -457,18 +482,18 @@ function DatasetAnalytics() {
 
           <article className="dataset-rows-card">
             <div className="dataset-card-heading">
-              <div><h3>{selectedSplit === "test" ? "Held-out test predictions" : "Highest-risk training observations"}</h3><span>{selectedSplit === "test" ? "One highest model estimate per event" : "Observed training labels; not model predictions"}</span></div>
+              <div><h3>{selectedSplit === "test" ? "Unlabeled test event predictions" : "Highest-risk training observations"}</h3><span>{selectedSplit === "test" ? "Latest message ≥2 days before TCA; final outcomes unavailable" : "Observed training labels; not model predictions"}</span></div>
               <span className="rows-count">8 rows</span>
             </div>
             <div className="dataset-table-wrap">
               <table className="dataset-table">
-                <thead><tr><th>EVENT / ROW</th><th>MODEL CLASS</th><th>PRED. Pc</th><th>TRUE log10(Pc)</th><th>MISS (KM)</th></tr></thead>
+                <thead><tr><th>EVENT / OBS.</th><th>{selectedSplit === "test" ? "PREDICTED TIER" : "MODEL CLASS"}</th><th>{selectedSplit === "test" ? "CONFIDENCE" : "PRED. Pc"}</th><th>{selectedSplit === "test" ? "FINAL LABEL" : "TRUE log10(Pc)"}</th><th>MISS (KM)</th></tr></thead>
                 <tbody>{previewRows.map((record) => (
-                  <tr key={record.row}>
-                    <td>{record.eventId}<small>Row {record.row.toLocaleString()}</small></td>
+                  <tr key={selectedSplit === "test" ? record.eventId : record.row}>
+                    <td>{record.eventId}<small>{selectedSplit === "test" ? `TCA in ${formatRaw(record.timeToTcaDays)} days` : `Row ${record.row.toLocaleString()}`}</small></td>
                     <td><span className={`table-tier ${record.predictedTier}`}>{selectedSplit === "test" ? record.predictedTier : "Observed"}</span></td>
-                    <td>{record.predictedRisk === null ? "—" : formatProbability(record.predictedPc)}</td>
-                    <td className="target-value">{formatRaw(record.actualRisk)}</td>
+                    <td>{selectedSplit === "test" ? `${(record.confidence * 100).toFixed(1)}%` : formatProbability(record.predictedPc)}</td>
+                    <td className="target-value">{selectedSplit === "test" ? "Unavailable" : formatRaw(record.actualRisk)}</td>
                     <td>{formatRaw(record.missDistance / 1000)}</td>
                   </tr>
                 ))}</tbody>
@@ -718,7 +743,7 @@ function CsvScreening() {
           </div>
         </div>
         <div className="csv-format-help">
-          Required columns: <code>pc</code> (0–1) or <code>risk</code> (log10(Pc)), plus <code>miss_distance_m</code> (meters), <code>miss_distance_km</code>, or <code>miss_distance</code> (meters). Optional: <code>event_id</code> and <code>time_to_tca</code> (days). Headers are case-insensitive.
+          Required columns: <code>pc</code> (0–1) or <code>risk</code> (log10(Pc)), plus a miss-distance column. Workbook event labels using <code>final_risk_log10_pc</code> and <code>final_miss_distance_m</code> are supported; introductory note rows are skipped.
         </div>
         {error && <div className="csv-import-message error" role="alert">{error}</div>}
         {screening && (
@@ -775,41 +800,38 @@ function downloadCsv(fileName, content) {
 }
 
 function ModelEvaluation() {
-  const { model } = datasetSummary;
-  const { modelEvaluation, warningWindow } = datasetSummary.splits.test;
+  const { model, training, validation, test } = eventModelSummary;
+  const modelEvaluation = validation.metrics;
   const critical = modelEvaluation.classMetrics.critical;
-  const earliestTestHours = datasetSummary.splits.test.timeRangeDays.min * 24;
   return (
     <section className="model-section" id="model">
       <div className="section-heading">
-        <div><span className="panel-eyebrow">TRAIN SPLIT → HELD-OUT TEST SPLIT</span><h2>AI model &amp; 24-hour warnings</h2></div>
+        <div><span className="panel-eyebrow">EVENT-LEVEL TRAINING · GROUPED VALIDATION</span><h2>AI event-tier model</h2></div>
         <span className="model-kind">{model.algorithm}</span>
       </div>
       <div className="model-panel">
         <div className="model-stat-grid">
-          <article><span>Test Pc error (MAE)</span><strong>{formatRaw(modelEvaluation.meanAbsoluteError)} <small>log10 units</small></strong></article>
-          <article><span>Test tier accuracy</span><strong>{(modelEvaluation.accuracy * 100).toFixed(1)}<small>%</small></strong></article>
+          <article><span>Eligible training events</span><strong>{training.eligibleEvents.toLocaleString()}</strong></article>
+          <article><span>Grouped validation events</span><strong>{modelEvaluation.events.toLocaleString()}</strong></article>
+          <article><span>Validation accuracy</span><strong>{(modelEvaluation.accuracy * 100).toFixed(1)}<small>%</small></strong></article>
           <article><span>Critical recall</span><strong>{(critical.recall * 100).toFixed(1)}<small>%</small></strong></article>
-          <article><span>Elevated recall</span><strong>{(modelEvaluation.classMetrics.elevated.recall * 100).toFixed(1)}<small>%</small></strong></article>
         </div>
-        <div className={`warning-window ${warningWindow.uniqueConjunctions ? "has-events" : ""}`}>
+        <div className={`warning-window ${test.predictedTierCounts.critical ? "has-events" : ""}`}>
           <span className="warning-icon"><Icon name="clock" size={17} /></span>
           <div className="warning-copy">
-            <strong>Next 24 hours · held-out test split</strong>
-            <span>{warningWindow.uniqueConjunctions
-              ? `${warningWindow.uniqueConjunctions.toLocaleString()} unique conjunctions observed; ${warningWindow.actionableConjunctions.toLocaleString()} elevated or critical, ${warningWindow.withinFiveKmConjunctions.toLocaleString()} within 5 km.`
-              : `No test observations fall inside the 24-hour window. The earliest test TCA is ${formatRaw(earliestTestHours)} hours away.`}</span>
-            <small>Training reference (historical, not live): {datasetSummary.splits.train.warningWindow.uniqueConjunctions.toLocaleString()} unique conjunctions within 24 h; {datasetSummary.splits.train.warningWindow.actionableConjunctions.toLocaleString()} were elevated or critical.</small>
+            <strong>Test-set predictions · final labels unavailable</strong>
+            <span>{test.eventsWithEligibleObservations.toLocaleString()} events with an eligible observation: {test.predictedTierCounts.safe.toLocaleString()} safe, {test.predictedTierCounts.elevated.toLocaleString()} elevated, {test.predictedTierCounts.critical.toLocaleString()} critical.</span>
+            <small>These are model predictions, not verified event outcomes or a 24-hour warning count.</small>
           </div>
-          <div className="warning-count"><strong>{warningWindow.actionableConjunctions.toLocaleString()}</strong><span>actionable</span></div>
+          <div className="warning-count"><strong>{(critical.recall * 100).toFixed(1)}%</strong><span>critical recall</span></div>
         </div>
         <div className="model-explanation">
           <Icon name="spark" size={16} />
-          <p>Model: {model.trainRows.toLocaleString()} training rows; {modelEvaluation.rows.toLocaleString()} held-out test rows. Inputs are restricted to the 12 permitted telemetry fields. Risk tiers are derived using Pc <code>10 ** risk</code> and the distance rules above. Metrics are row-level, so repeated messages from one conjunction are not statistically independent. Because miss distance is also part of the screening label, tier scores partly reflect reproducing that rule. Test Pc MAE is {formatRaw(modelEvaluation.meanAbsoluteError)} log10 units (R² {formatRaw(modelEvaluation.rSquared)}): treat predicted probabilities as experimental, not calibrated operational Pc.</p>
+          <p>Target: each event&apos;s workbook <code>final_tier</code>. Training uses one latest observation per event at least 2 days before TCA; {training.fitEvents.toLocaleString()} events fit the model and {modelEvaluation.events.toLocaleString()} separate events validate it. Events—not telemetry rows—are split, preventing messages from the same conjunction leaking across the split. The test data has no final labels, so its {test.eventsWithEligibleObservations.toLocaleString()} outputs are predictions only. Validation uses inverse-frequency class weights; balanced accuracy is {(modelEvaluation.balancedAccuracy * 100).toFixed(1)}%. Features include miss distance and risk-related telemetry, so this is a screening prototype, not operational maneuver guidance.</p>
         </div>
         <div className="model-reliability-note" role="note">
-          <strong>Probability calibration warning</strong>
-          <span>A {formatRaw(modelEvaluation.meanAbsoluteError)} log10(Pc) test error means the model&apos;s probability estimates are not yet reliable for real maneuver decisions. This prototype is for exploration; do not make operational decisions from model predictions.</span>
+          <strong>Critical-tier validation warning</strong>
+          <span>Critical recall is {(critical.recall * 100).toFixed(1)}% and precision is {(critical.precision * 100).toFixed(1)}% on grouped validation events. The classifier still produces false alerts and must not be used for real maneuver decisions. Test predictions cannot be accuracy-checked until final event labels are provided.</span>
         </div>
       </div>
     </section>
@@ -820,9 +842,9 @@ function Analytics() {
   return (
     <section className="analytics-section" id="analytics">
       <div className="analytics-icon"><Icon name="spark" size={20} /></div>
-      <div className="analytics-copy"><span>READY FOR THE NEXT STEP</span><h3>Train a collision-risk model</h3><p>Use training rows to fit a model, then evaluate predictions against the labeled test split. Keep the two splits separate.</p></div>
+      <div className="analytics-copy"><span>EVENT-LEVEL CLASSIFICATION</span><h3>Validate collision-risk tiers</h3><p>Training and validation are grouped by event; test predictions remain unlabeled until final outcomes are supplied.</p></div>
       <div className="analytics-stat"><strong>{datasetSummary.splits.train.featureColumns}</strong><span>input features</span></div>
-      <div className="analytics-stat"><strong>2</strong><span>labeled data splits</span></div>
+      <div className="analytics-stat"><strong>3</strong><span>risk tiers</span></div>
       <button className="analytics-action" type="button" onClick={() => document.getElementById("datasets")?.scrollIntoView({ behavior: "smooth" })}>Review dataset <Icon name="arrow" size={15} /></button>
     </section>
   );
@@ -844,10 +866,10 @@ function App() {
             <button type="button" className="export-button" onClick={() => window.print()}><Icon name="download" size={16} /> Export report</button>
           </section>
           <section className="metrics-grid" aria-label="Supplied dataset overview">
-            <MetricCard label="Training conjunctions" value={datasetSummary.splits.train.uniqueConjunctions.toLocaleString()} detail={`${datasetSummary.splits.train.rows.toLocaleString()} telemetry rows`} icon="satellite" tone="blue" />
-            <MetricCard label="Held-out test events" value={datasetSummary.splits.test.uniqueConjunctions.toLocaleString()} detail={`${datasetSummary.splits.test.rows.toLocaleString()} test rows`} icon="orbit" tone="teal" />
-            <MetricCard label="Critical recall" value={`${(datasetSummary.splits.test.modelEvaluation.classMetrics.critical.recall * 100).toFixed(1)}%`} detail="Held-out test labels" icon="crosshair" tone="amber" />
-            <MetricCard label="24h test warnings" value={datasetSummary.splits.test.warningWindow.actionableConjunctions.toLocaleString()} detail="No unseen live telemetry" icon="shield" tone="green" />
+            <MetricCard label="Eligible training events" value={eventModelSummary.training.eligibleEvents.toLocaleString()} detail={`${eventModelSummary.unusableLabelEvents.toLocaleString()} lack messages ≥2 days out`} icon="satellite" tone="blue" />
+            <MetricCard label="Test event predictions" value={eventModelSummary.test.eventsWithEligibleObservations.toLocaleString()} detail="Final labels unavailable" icon="orbit" tone="teal" />
+            <MetricCard label="Validation critical recall" value={`${(eventModelSummary.validation.metrics.classMetrics.critical.recall * 100).toFixed(1)}%`} detail="Grouped by event ID" icon="crosshair" tone="amber" />
+            <MetricCard label="Validation balanced accuracy" value={`${(eventModelSummary.validation.metrics.balancedAccuracy * 100).toFixed(1)}%`} detail="Internal held-out events" icon="shield" tone="green" />
           </section>
           <RiskEvaluator />
           <CsvScreening />

@@ -7,8 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/riskPolicy.test.js src/csvScreening.test.js",
-    "data:summary": "node scripts/summarize-datasets.mjs"
+    "test": "node --test src/riskPolicy.test.js src/csvScreening.test.js scripts/summarize-event-model.test.mjs",
+    "data:summary": "node scripts/summarize-datasets.mjs",
+    "data:event-model": "node scripts/summarize-event-model.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",

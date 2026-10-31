@@ -22,6 +22,20 @@ test("converts dataset risk log10(Pc) and meter-based miss distance", () => {
   assert.equal(result.screenedRows[0].classification, "critical");
 });
 
+test("imports workbook event-label CSV with its note preamble and final-value columns", () => {
+  const result = screenCsvContent(
+    "One row per train_data event. final_* values describe the closest approach,,,,,,,,\n" +
+    ",,,,,,,,\n" +
+    "event_id,mission_id,cdm_count,cdm_count_2d_or_more,final_time_to_tca_days,final_risk_log10_pc,final_miss_distance_m,final_tier,usable_for_training\n" +
+    "CDM-4,5,4,3,0.5,-5,4000,Elevated,yes\n",
+  );
+  assert.equal(result.screenedRows.length, 1);
+  assert.equal(result.screenedRows[0].eventId, "CDM-4");
+  assert.equal(result.screenedRows[0].pc, 1e-5);
+  assert.equal(result.screenedRows[0].missDistanceKm, 4);
+  assert.equal(result.screenedRows[0].classification, "elevated");
+});
+
 test("supports kilometer distance columns, quoted commas, and escaped quotes", () => {
   const result = screenCsvContent(
     'event_id,pc,miss_distance_km,note\n"CDM, ""A""",1e-7,8,"quoted, note"\n',
