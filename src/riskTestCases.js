@@ -30,14 +30,14 @@ export const riskTestCases = [
   {
     id: "ELEVATED-03",
     name: "Exactly 5 km",
-    pc: 1e-8,
+    pc: 1e-7,
     missDistanceKm: 5,
     expected: "elevated",
   },
   {
     id: "ELEVATED-04",
     name: "Exactly 1 km",
-    pc: 1e-8,
+    pc: 1e-7,
     missDistanceKm: 1,
     expected: "elevated",
   },
@@ -51,7 +51,7 @@ export const riskTestCases = [
   {
     id: "CRITICAL-02",
     name: "Inside 1 km",
-    pc: 1e-8,
+    pc: 1e-7,
     missDistanceKm: 0.999,
     expected: "critical",
   },

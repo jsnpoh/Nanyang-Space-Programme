@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import datasetSummary from "./data/dataset-summary.json";
+import { createScreenedCsv, screenCsvContent } from "./csvScreening.js";
 import { classifyCollisionRisk } from "./riskPolicy.js";
 import { riskTestCases } from "./riskTestCases.js";
 
@@ -48,6 +49,7 @@ const events = [
 const navigation = [
   { label: "Overview", icon: "grid", href: "#overview" },
   { label: "Risk evaluator", icon: "crosshair", href: "#evaluator" },
+  { label: "Upload data", icon: "download", href: "#upload" },
   { label: "AI validation", icon: "chart", href: "#model" },
   { label: "Dataset analysis", icon: "chart", href: "#datasets" },
   { label: "Conjunctions", icon: "orbit", href: "#conjunctions", count: "12" },
@@ -642,6 +644,136 @@ function RiskEvaluator() {
   );
 }
 
+function CsvScreening() {
+  const fileInputRef = useRef(null);
+  const [screening, setScreening] = useState(null);
+  const [error, setError] = useState("");
+  const [isReading, setIsReading] = useState(false);
+
+  async function importCsv(event) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+
+    setScreening(null);
+    setError("");
+    setIsReading(true);
+    try {
+      if (!/\.(csv|txt)$/i.test(file.name)) {
+        throw new Error("Choose a .csv file or a plain-text .txt file containing CSV-formatted data.");
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        throw new Error("CSV files must be 50 MB or smaller. Split larger datasets into smaller files.");
+      }
+      const parsed = screenCsvContent(await file.text());
+      setScreening({ ...parsed, fileName: file.name });
+    } catch (readError) {
+      setError(readError instanceof Error ? readError.message : "The CSV file could not be screened.");
+    } finally {
+      setIsReading(false);
+    }
+  }
+
+  function downloadTemplate() {
+    const content = "event_id,pc,miss_distance_m,time_to_tca\nCDM-EXAMPLE,1e-5,2500,0.5\n";
+    downloadCsv("conjunction-screening-template.csv", content);
+  }
+
+  function downloadResults() {
+    if (!screening) return;
+    downloadCsv("screened-conjunctions.csv", createScreenedCsv(screening.headers, screening.screenedRows));
+  }
+
+  const tierCounts = screening?.screenedRows.reduce((counts, row) => {
+    counts[row.classification] += 1;
+    return counts;
+  }, { safe: 0, elevated: 0, critical: 0 });
+  const rowsWithin24Hours = screening?.screenedRows.filter((row) =>
+    row.timeToTcaDays !== null && row.timeToTcaDays >= 0 && row.timeToTcaDays <= 1,
+  ) ?? [];
+  const actionableWithin24Hours = new Set(
+    rowsWithin24Hours
+      .filter((row) => row.classification !== "safe")
+      .map((row) => row.eventId),
+  ).size;
+
+  return (
+    <section className="csv-screening-section" id="upload">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">LOCAL CSV SCREENING · NO FILE UPLOAD</span><h2>Screen a new dataset</h2></div>
+        <span className="dataset-source-note">Up to 50 MB · 100,000 rows</span>
+      </div>
+      <div className="csv-screening-panel">
+        <div className="csv-upload-controls">
+          <div className="csv-upload-copy">
+            <strong>Choose a conjunction CSV</strong>
+            <span>Applies the screening rules to Pc and miss distance; it does not retrain the AI model. Your file stays in this browser.</span>
+          </div>
+          <div className="csv-upload-actions">
+            <button type="button" className="csv-template-button" onClick={downloadTemplate}>Download CSV template</button>
+            <input ref={fileInputRef} className="screening-file-input" type="file" accept=".csv,.txt,text/csv,text/plain" onChange={importCsv} aria-label="Choose conjunction CSV or text file" />
+            <button type="button" className="csv-upload-button" disabled={isReading} onClick={() => fileInputRef.current?.click()}>
+              <Icon name="plus" size={15} />{isReading ? "Screening file..." : "Choose file"}
+            </button>
+          </div>
+        </div>
+        <div className="csv-format-help">
+          Required columns: <code>pc</code> (0–1) or <code>risk</code> (log10(Pc)), plus <code>miss_distance_m</code> (meters), <code>miss_distance_km</code>, or <code>miss_distance</code> (meters). Optional: <code>event_id</code> and <code>time_to_tca</code> (days). Headers are case-insensitive.
+        </div>
+        {error && <div className="csv-import-message error" role="alert">{error}</div>}
+        {screening && (
+          <div className="csv-screening-results">
+            <div className="csv-results-heading">
+              <div><strong>{screening.fileName}</strong><span>{screening.screenedRows.length.toLocaleString()} screened{screening.rejectedRows.length ? ` · ${screening.rejectedRows.length.toLocaleString()} invalid rows skipped` : ""}</span></div>
+              <button type="button" className="csv-download-button" onClick={downloadResults}><Icon name="download" size={14} /> Download results</button>
+            </div>
+            <div className="csv-tier-counts" aria-label="Screening result counts">
+              <div><span>Safe</span><strong>{tierCounts.safe.toLocaleString()}</strong></div>
+              <div><span>Elevated</span><strong>{tierCounts.elevated.toLocaleString()}</strong></div>
+              <div><span>Critical</span><strong>{tierCounts.critical.toLocaleString()}</strong></div>
+              {screening.headers.some((header) => header.trim().toLowerCase().replace(/[\s-]+/g, "_") === "time_to_tca") && (
+                <div><span>Actionable within 24h</span><strong>{actionableWithin24Hours.toLocaleString()}</strong></div>
+              )}
+            </div>
+            {screening.rejectedRows.length > 0 && (
+              <div className="csv-invalid-rows" role="status">
+                <strong>Rows needing attention</strong>
+                {screening.rejectedRows.slice(0, 5).map((row) => <span key={row.rowNumber}>Row {row.rowNumber}: {row.reason}</span>)}
+                {screening.rejectedRows.length > 5 && <span>And {screening.rejectedRows.length - 5} more invalid rows.</span>}
+              </div>
+            )}
+            <div className="csv-results-table-wrap">
+              <table className="csv-results-table">
+                <thead><tr><th>EVENT ID</th><th>Pc</th><th>MISS (KM)</th><th>SCREENING RESULT</th></tr></thead>
+                <tbody>{screening.screenedRows.slice(0, 100).map((row) => (
+                  <tr key={row.csvRowNumber}>
+                    <td>{row.eventId}</td>
+                    <td>{formatProbability(row.pc)}</td>
+                    <td>{formatRaw(row.missDistanceKm)}</td>
+                    <td><span className={`table-tier ${row.classification}`}>{row.classification}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            {screening.screenedRows.length > 100 && <div className="csv-results-footnote">Showing first 100 rows; the downloaded CSV includes all {screening.screenedRows.length.toLocaleString()} screened rows.</div>}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function downloadCsv(fileName, content) {
+  const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 function ModelEvaluation() {
   const { model } = datasetSummary;
   const { modelEvaluation, warningWindow } = datasetSummary.splits.test;
@@ -718,6 +850,7 @@ function App() {
             <MetricCard label="24h test warnings" value={datasetSummary.splits.test.warningWindow.actionableConjunctions.toLocaleString()} detail="No unseen live telemetry" icon="shield" tone="green" />
           </section>
           <RiskEvaluator />
+          <CsvScreening />
           <ModelEvaluation />
           <DatasetAnalytics />
           <section className="orbital-section">
