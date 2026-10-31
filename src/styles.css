@@ -414,6 +414,20 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .input-hint { color: #7d8da0; font-size: 8px; }
 .evaluator-form input { width: 100%; height: 33px; grid-column: 1 / -1; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; background: rgba(6,14,24,.52); color: #e9f1f7; font-size: 11px; }
 .evaluator-form input:focus { border-color: rgba(84,214,194,.5); outline: 0; }
+.pc-value { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr auto; align-items: center; gap: 5px 8px; }
+.pc-value > span { color: #adb9c6; font-size: 9px; }
+.pc-value > output { color: #e9f1f7; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pc-value > small { grid-column: 1 / -1; color: #7d8da0; font-size: 8px; }
+.pc-controls { display: grid; grid-column: 1 / -1; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.pc-control { display: grid; gap: 5px; }
+.pc-control > span { display: flex; justify-content: space-between; gap: 5px; color: #adb9c6; font-size: 8px; }
+.pc-control > span small { color: #7d8da0; font-size: 8px; }
+.pc-control > div { display: grid; grid-template-columns: 28px minmax(0,1fr) 28px; gap: 4px; }
+.pc-control button { height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 3px; background: rgba(6,14,24,.52); color: #aab8c6; font-size: 12px; line-height: 1; cursor: pointer; }
+.pc-control button:hover:not(:disabled) { border-color: rgba(84,214,194,.5); color: #74ddcb; }
+.pc-control button:disabled { color: #566578; cursor: not-allowed; }
+.pc-control button:focus-visible { outline: 1px solid var(--teal); outline-offset: 1px; }
+.pc-control output { display: grid; min-width: 0; place-items: center; border: 1px solid var(--line); border-radius: 3px; background: rgba(6,14,24,.52); color: #e9f1f7; font-size: 10px; font-variant-numeric: tabular-nums; }
 .evaluator-submit,.run-cases-button { display: inline-flex; min-height: 32px; align-items: center; justify-content: center; gap: 7px; padding: 0 10px; border: 1px solid rgba(84,214,194,.27); border-radius: 5px; background: rgba(84,214,194,.09); color: #74ddcb; font-size: 9px; font-weight: 600; cursor: pointer; }
 .evaluator-submit:hover,.run-cases-button:hover { background: rgba(84,214,194,.17); }
 .evaluation-result { display: grid; gap: 5px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; }

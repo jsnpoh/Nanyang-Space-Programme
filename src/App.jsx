@@ -484,26 +484,49 @@ function DatasetAnalytics() {
   );
 }
 
-function formatProbability(pc) {
-  return Number.isFinite(pc) ? pc.toExponential(2).replace("e-", "e−") : "—";
+function formatProbability(pc, fractionDigits = 2) {
+  return Number.isFinite(pc) ? pc.toExponential(fractionDigits).replace("e-", "e−") : "—";
 }
 
 function RiskEvaluator() {
-  const [pc, setPc] = useState("1e-7");
+  const minimumPc = 1e-7;
+  const maximumPc = 1e-4;
+  const [pcMantissaTenths, setPcMantissaTenths] = useState(10);
+  const [pcExponent, setPcExponent] = useState(-7);
   const [distance, setDistance] = useState("5.01");
   const [result, setResult] = useState(null);
   const [caseResults, setCaseResults] = useState([]);
   const passedCases = caseResults.filter((item) => item.passed).length;
+  const pcMantissa = pcMantissaTenths / 10;
+  const pc = pcMantissa * 10 ** pcExponent;
+
+  function canSetPc(mantissaTenths, exponent) {
+    const value = (mantissaTenths / 10) * 10 ** exponent;
+    return value >= minimumPc && value <= maximumPc;
+  }
+
+  function stepPcMantissa(direction) {
+    const nextMantissaTenths = pcMantissaTenths + direction;
+    if (canSetPc(nextMantissaTenths, pcExponent)) {
+      setPcMantissaTenths(nextMantissaTenths);
+    }
+  }
+
+  function stepPcExponent(direction) {
+    const nextExponent = pcExponent + direction;
+    if (canSetPc(pcMantissaTenths, nextExponent)) {
+      setPcExponent(nextExponent);
+    }
+  }
 
   function evaluate() {
     try {
-      const evaluatedPc = Number(pc);
       const evaluatedDistance = Number(distance);
-      const classification = classifyCollisionRisk(evaluatedPc, evaluatedDistance);
+      const classification = classifyCollisionRisk(pc, evaluatedDistance);
       setResult({
         classification,
         error: null,
-        pc: evaluatedPc,
+        pc,
         distance: evaluatedDistance,
       });
     } catch (error) {
@@ -512,7 +535,9 @@ function RiskEvaluator() {
   }
 
   function runCase(scenario) {
-    setPc(String(scenario.pc));
+    const [mantissa, exponent] = scenario.pc.toExponential(1).split("e").map(Number);
+    setPcMantissaTenths(Math.round(mantissa * 10));
+    setPcExponent(exponent);
     setDistance(String(scenario.missDistanceKm));
     const actual = classifyCollisionRisk(scenario.pc, scenario.missDistanceKm);
     setResult({
@@ -540,10 +565,30 @@ function RiskEvaluator() {
       <div className="evaluator-panel">
         <div className="evaluator-columns">
           <form className="evaluator-form" onSubmit={(event) => { event.preventDefault(); evaluate(); }}>
-            <div className="evaluator-form-heading"><Icon name="crosshair" size={18} /><div><strong>Evaluate a conjunction</strong><span>Enter Pc and closest miss distance.</span></div></div>
-            <label>Collision probability (Pc)<span className="input-hint">e.g. 1e-5</span>
-              <input aria-label="Collision probability Pc" type="number" step="any" min="0" max="1" value={pc} onChange={(event) => setPc(event.target.value)} />
-            </label>
+            <div className="evaluator-form-heading"><Icon name="crosshair" size={18} /><div><strong>Evaluate a conjunction</strong><span>Adjust Pc and enter the closest miss distance.</span></div></div>
+            <div className="pc-value">
+              <span>Collision probability (Pc)</span>
+              <output aria-live="polite">{formatProbability(pc, 1)}</output>
+              <small>Range {formatProbability(minimumPc, 1)}–{formatProbability(maximumPc, 1)}</small>
+            </div>
+            <div className="pc-controls">
+              <div className="pc-control">
+                <span>Mantissa <small>step 0.1</small></span>
+                <div>
+                  <button type="button" aria-label="Decrease Pc mantissa by 0.1" disabled={pcMantissaTenths <= 10 || !canSetPc(pcMantissaTenths - 1, pcExponent)} onClick={() => stepPcMantissa(-1)}>−</button>
+                  <output>{pcMantissa.toFixed(1)}</output>
+                  <button type="button" aria-label="Increase Pc mantissa by 0.1" disabled={pcMantissaTenths >= 99 || !canSetPc(pcMantissaTenths + 1, pcExponent)} onClick={() => stepPcMantissa(1)}>+</button>
+                </div>
+              </div>
+              <div className="pc-control">
+                <span>Exponent <small>step 1</small></span>
+                <div>
+                  <button type="button" aria-label="Decrease Pc exponent by 1" disabled={pcExponent <= -7 || !canSetPc(pcMantissaTenths, pcExponent - 1)} onClick={() => stepPcExponent(-1)}>−</button>
+                  <output>{pcExponent}</output>
+                  <button type="button" aria-label="Increase Pc exponent by 1" disabled={pcExponent >= -4 || !canSetPc(pcMantissaTenths, pcExponent + 1)} onClick={() => stepPcExponent(1)}>+</button>
+                </div>
+              </div>
+            </div>
             <label>Miss distance <span className="input-hint">kilometers</span>
               <input aria-label="Miss distance in kilometers" type="number" step="any" min="0" value={distance} onChange={(event) => setDistance(event.target.value)} />
             </label>

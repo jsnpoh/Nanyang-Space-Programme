@@ -2,14 +2,14 @@ export const riskTestCases = [
   {
     id: "SAFE-01",
     name: "Clear miss, low Pc",
-    pc: 9.99e-7,
+    pc: 9.9e-7,
     missDistanceKm: 5.01,
     expected: "safe",
   },
   {
     id: "SAFE-02",
     name: "Wide miss, very low Pc",
-    pc: 1e-8,
+    pc: 1e-7,
     missDistanceKm: 12,
     expected: "safe",
   },
@@ -23,7 +23,7 @@ export const riskTestCases = [
   {
     id: "ELEVATED-02",
     name: "Upper Pc boundary: below 1e-4",
-    pc: 9.99e-5,
+    pc: 9.9e-5,
     missDistanceKm: 8,
     expected: "elevated",
   },
