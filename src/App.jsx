@@ -1,4 +1,7 @@
 import { useMemo, useState } from "react";
+import datasetSummary from "./data/dataset-summary.json";
+import { classifyCollisionRisk } from "./riskPolicy.js";
+import { riskTestCases } from "./riskTestCases.js";
 
 const events = [
   {
@@ -44,6 +47,9 @@ const events = [
 
 const navigation = [
   { label: "Overview", icon: "grid", href: "#overview" },
+  { label: "Risk evaluator", icon: "crosshair", href: "#evaluator" },
+  { label: "AI validation", icon: "chart", href: "#model" },
+  { label: "Dataset analysis", icon: "chart", href: "#datasets" },
   { label: "Conjunctions", icon: "orbit", href: "#conjunctions", count: "12" },
   { label: "Fleet health", icon: "satellite", href: "#fleet" },
   { label: "Analytics", icon: "chart", href: "#analytics" },
@@ -96,7 +102,7 @@ function Sidebar() {
       <Brand />
       <div className="workspace-switcher">
         <div className="workspace-avatar">N</div>
-        <div className="workspace-copy"><strong>Northstar Space</strong><span>Mission control</span></div>
+        <div className="workspace-copy"><strong>Nanyang Space Programme</strong><span>Mission control</span></div>
         <span className="workspace-caret">⌄</span>
       </div>
       <div className="side-label">WORKSPACE</div>
@@ -237,7 +243,7 @@ function RiskSummary({ event, onSchedule, scheduled }) {
   return (
     <aside className="risk-panel">
       <div className="risk-panel-heading">
-        <div><span className="panel-eyebrow">CLOSEST APPROACH</span><span className="risk-badge"><i /> {event.risk} risk</span></div>
+        <div><span className="panel-eyebrow">SIMULATED CLOSEST APPROACH</span><span className="risk-badge"><i /> {event.risk} risk</span></div>
         <button type="button" className="dots-button" aria-label="More conjunction options">•••</button>
       </div>
       <div className="countdown">{event.conjunction.replace("In ", "")}</div>
@@ -270,7 +276,7 @@ function Conjunctions({ selectedEvent, onSelect, searchTerm }) {
   return (
     <section className="conjunction-section" id="conjunctions">
       <div className="section-heading">
-        <div><span className="panel-eyebrow">AI-PRIORITIZED · SAMPLE DATA</span><h2>Upcoming conjunctions <span className="heading-count">12</span></h2></div>
+        <div><span className="panel-eyebrow">DEMO DATA · NOT FROM CSV</span><h2>Example conjunctions <span className="heading-count">12</span></h2></div>
         <button className="view-all-button" type="button" onClick={() => setFilter(filter === "All events" ? "High" : "All events")}>
           {filter === "All events" ? "View all events" : "Show all"} <Icon name="arrow" size={14} />
         </button>
@@ -311,7 +317,7 @@ function FleetHealth() {
   return (
     <section className="fleet-section" id="fleet">
       <div className="section-heading">
-        <div><span className="panel-eyebrow">SPACECRAFT STATUS</span><h2>Fleet health</h2></div>
+        <div><span className="panel-eyebrow">DEMO SPACECRAFT · NOT FROM CSV</span><h2>Example fleet health</h2></div>
         <a className="view-all-button" href="#overview">View fleet <Icon name="arrow" size={14} /></a>
       </div>
       <div className="fleet-table-wrap">
@@ -332,14 +338,315 @@ function FleetHealth() {
   );
 }
 
+function formatRaw(value) {
+  return Number.isFinite(value)
+    ? new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(value)
+    : "—";
+}
+
+function DatasetAnalytics() {
+  const [selectedSplit, setSelectedSplit] = useState("train");
+  const dataset = datasetSummary.splits[selectedSplit];
+  const riskStats = dataset.stats.risk;
+  const previewRows = selectedSplit === "test"
+    ? dataset.topPredictions.map((record) => ({
+        row: record.row,
+        eventId: record.eventId,
+        predictedRisk: record.predictedRisk,
+        actualRisk: record.actualRisk,
+        predictedPc: record.predictedPc,
+        missDistance: record.missDistanceMeters,
+        relativeSpeed: record.relativeSpeed,
+        predictedTier: record.predictedTier,
+      }))
+    : dataset.topRiskObservations.map((record) => ({
+        row: record.row,
+        eventId: record.eventId,
+        predictedRisk: null,
+        actualRisk: record.risk,
+        predictedPc: 10 ** record.risk,
+        missDistance: record.missDistance,
+        relativeSpeed: record.relativeSpeed,
+        predictedTier: classifyCollisionRisk(
+          10 ** record.risk,
+          record.missDistance / 1000,
+        ),
+      }));
+  const maxBinCount = Math.max(...dataset.riskHistogram.map((bin) => bin.count));
+  const chartWidth = 680;
+  const chartHeight = 210;
+  const plotTop = 24;
+  const plotBottom = 164;
+  const plotHeight = plotBottom - plotTop;
+  const binWidth = 49;
+
+  return (
+    <section className="dataset-section" id="datasets">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">SUPPLIED CSV DATA · SUMMARY STATISTICS</span><h2>Training &amp; test data</h2></div>
+        <span className="dataset-source-note">Raw CSV files stay on your machine</span>
+      </div>
+      <div className="dataset-panel">
+        <div className="dataset-panel-heading">
+          <div className="dataset-split-tabs" role="group" aria-label="Select dataset split">
+            {["train", "test"].map((split) => (
+              <button
+                type="button"
+                key={split}
+                className={selectedSplit === split ? "selected" : ""}
+                aria-pressed={selectedSplit === split}
+                onClick={() => setSelectedSplit(split)}
+              >
+                {split === "train" ? "Training" : "Test"}
+                <span>{datasetSummary.splits[split].rows.toLocaleString()}</span>
+              </button>
+            ))}
+          </div>
+          <div className="dataset-file">{dataset.fileName} <span>·</span> {dataset.columns} columns</div>
+        </div>
+
+        <div className="dataset-facts">
+          <article><span>Records</span><strong>{dataset.rows.toLocaleString()}</strong><small>CSV data rows</small></article>
+          <article><span>Unique conjunctions</span><strong>{dataset.uniqueConjunctions.toLocaleString()}</strong><small>Grouped by event ID</small></article>
+          <article><span>Allowed model inputs</span><strong>{dataset.featureColumns}</strong><small>Project-approved CSV features</small></article>
+          <article><span>Risk target coverage</span><strong>{((dataset.target.labeledRows / dataset.rows) * 100).toFixed(1)}%</strong><small>{dataset.target.missingRows.toLocaleString()} missing labels</small></article>
+        </div>
+
+        <div className="tier-summary">
+          <div className="tier-summary-heading"><span>Rule-based labels</span><small>Telemetry rows · not unique events</small></div>
+          {["safe", "elevated", "critical"].map((tier) => (
+            <div className={`tier-summary-item ${tier}`} key={tier}>
+              <span><i />{tier}</span>
+              <strong>{dataset.actualTierCounts[tier].toLocaleString()}</strong>
+              <small>{((dataset.actualTierCounts[tier] / dataset.rows) * 100).toFixed(1)}%</small>
+            </div>
+          ))}
+        </div>
+
+        <div className="dataset-detail-grid">
+          <article className="dataset-chart-card">
+            <div className="dataset-card-heading">
+              <div><h3>Risk target distribution</h3><span>Raw <code>risk</code> values · shared scale for both splits</span></div>
+              <span className="raw-data-tag">RAW VALUES</span>
+            </div>
+            <div className="histogram-wrap">
+              <svg className="risk-histogram" viewBox={`0 0 ${chartWidth} ${chartHeight}`} role="img" aria-label={`Distribution of risk target values in ${dataset.fileName}`}>
+                {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
+                  const y = plotBottom - fraction * plotHeight;
+                  return <g className="histogram-grid" key={fraction}><line x1="40" y1={y} x2="660" y2={y} /><text x="34" y={y + 3} textAnchor="end">{formatRaw(maxBinCount * fraction)}</text></g>;
+                })}
+                <line className="histogram-axis" x1="40" y1={plotTop} x2="40" y2={plotBottom} />
+                <line className="histogram-axis" x1="40" y1={plotBottom} x2="660" y2={plotBottom} />
+                {dataset.riskHistogram.map((bin, index) => {
+                  const height = maxBinCount ? (bin.count / maxBinCount) * (plotHeight - 4) : 0;
+                  const x = 49 + index * binWidth;
+                  return <g key={index}><title>{`${formatRaw(bin.from)} to ${formatRaw(bin.to)}: ${bin.count.toLocaleString()} rows`}</title><rect className="histogram-bar" x={x} y={plotBottom - height} width="30" height={height} rx="3" /></g>;
+                })}
+                <text className="histogram-endpoint" x="48" y="188">{formatRaw(datasetSummary.riskAxis.min)}</text>
+                <text className="histogram-endpoint" x="660" y="188" textAnchor="end">{formatRaw(datasetSummary.riskAxis.max)}</text>
+              </svg>
+            </div>
+            <div className="dataset-stat-line">
+              <span><i className="stat-marker min" />Min <strong>{formatRaw(riskStats.min)}</strong></span>
+              <span><i className="stat-marker mean" />Mean <strong>{formatRaw(riskStats.mean)}</strong></span>
+              <span><i className="stat-marker max" />Max <strong>{formatRaw(riskStats.max)}</strong></span>
+            </div>
+          </article>
+
+          <article className="dataset-rows-card">
+            <div className="dataset-card-heading">
+              <div><h3>{selectedSplit === "test" ? "Held-out test predictions" : "Highest-risk training observations"}</h3><span>{selectedSplit === "test" ? "One highest model estimate per event" : "Observed training labels; not model predictions"}</span></div>
+              <span className="rows-count">8 rows</span>
+            </div>
+            <div className="dataset-table-wrap">
+              <table className="dataset-table">
+                <thead><tr><th>EVENT / ROW</th><th>MODEL CLASS</th><th>PRED. Pc</th><th>TRUE log10(Pc)</th><th>MISS (KM)</th></tr></thead>
+                <tbody>{previewRows.map((record) => (
+                  <tr key={record.row}>
+                    <td>{record.eventId}<small>Row {record.row.toLocaleString()}</small></td>
+                    <td><span className={`table-tier ${record.predictedTier}`}>{selectedSplit === "test" ? record.predictedTier : "Observed"}</span></td>
+                    <td>{record.predictedRisk === null ? "—" : formatProbability(record.predictedPc)}</td>
+                    <td className="target-value">{formatRaw(record.actualRisk)}</td>
+                    <td>{formatRaw(record.missDistance / 1000)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+
+        <div className="dataset-footnote">
+          <Icon name="shield" size={15} />
+          <p>Model estimates are trained on the training split only; Pc is calculated as <code>10 ** predicted risk</code> and clipped to the training target range. Test metrics use labeled held-out CSV rows. They are experimental, row-level estimates, not collision guarantees or maneuver advice.</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatProbability(pc) {
+  return Number.isFinite(pc) ? pc.toExponential(2).replace("e-", "e−") : "—";
+}
+
+function RiskEvaluator() {
+  const [pc, setPc] = useState("1e-7");
+  const [distance, setDistance] = useState("5.01");
+  const [result, setResult] = useState(null);
+  const [caseResults, setCaseResults] = useState([]);
+  const passedCases = caseResults.filter((item) => item.passed).length;
+
+  function evaluate() {
+    try {
+      const evaluatedPc = Number(pc);
+      const evaluatedDistance = Number(distance);
+      const classification = classifyCollisionRisk(evaluatedPc, evaluatedDistance);
+      setResult({
+        classification,
+        error: null,
+        pc: evaluatedPc,
+        distance: evaluatedDistance,
+      });
+    } catch (error) {
+      setResult({ classification: null, error: error.message });
+    }
+  }
+
+  function runCase(scenario) {
+    setPc(String(scenario.pc));
+    setDistance(String(scenario.missDistanceKm));
+    const actual = classifyCollisionRisk(scenario.pc, scenario.missDistanceKm);
+    setResult({
+      classification: actual,
+      error: null,
+      pc: scenario.pc,
+      distance: scenario.missDistanceKm,
+      scenario: scenario.id,
+    });
+  }
+
+  function runAllCases() {
+    setCaseResults(riskTestCases.map((scenario) => {
+      const actual = classifyCollisionRisk(scenario.pc, scenario.missDistanceKm);
+      return { id: scenario.id, actual, expected: scenario.expected, passed: actual === scenario.expected };
+    }));
+  }
+
+  return (
+    <section className="evaluator-section" id="evaluator">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">PROJECT-BRIEF SCREENING THRESHOLDS</span><h2>Collision risk evaluator</h2></div>
+        <span className="dataset-source-note">Deterministic policy · not model confidence</span>
+      </div>
+      <div className="evaluator-panel">
+        <div className="evaluator-columns">
+          <form className="evaluator-form" onSubmit={(event) => { event.preventDefault(); evaluate(); }}>
+            <div className="evaluator-form-heading"><Icon name="crosshair" size={18} /><div><strong>Evaluate a conjunction</strong><span>Enter Pc and closest miss distance.</span></div></div>
+            <label>Collision probability (Pc)<span className="input-hint">e.g. 1e-5</span>
+              <input aria-label="Collision probability Pc" type="number" step="any" min="0" max="1" value={pc} onChange={(event) => setPc(event.target.value)} />
+            </label>
+            <label>Miss distance <span className="input-hint">kilometers</span>
+              <input aria-label="Miss distance in kilometers" type="number" step="any" min="0" value={distance} onChange={(event) => setDistance(event.target.value)} />
+            </label>
+            <button type="submit" className="evaluator-submit"><Icon name="crosshair" size={15} /> Evaluate risk</button>
+            {result && (
+              <div className={`evaluation-result ${result.error ? "error" : result.classification}`} role="status" aria-live="polite">
+                {result.error ? <><strong>Invalid input</strong><span>{result.error}</span></> : <>
+                  <span>{result.scenario ? `${result.scenario} · ` : ""}SCREENING RESULT</span>
+                  <strong>{result.classification} {result.classification === "critical" && <em>· maneuver review</em>}</strong>
+                  <small>Pc {formatProbability(result.pc)} · miss {formatRaw(result.distance)} km</small>
+                </>}
+              </div>
+            )}
+          </form>
+
+          <div className="policy-card">
+            <div className="evaluator-form-heading"><Icon name="shield" size={18} /><div><strong>Configured risk tiers</strong><span>Critical rules take precedence; other conditions are combined with OR.</span></div></div>
+            <div className="policy-tier critical"><i /><strong>Critical</strong><span>Pc ≥ 1e-4 <b>OR</b> miss &lt; 1 km</span></div>
+            <div className="policy-tier elevated"><i /><strong>Elevated</strong><span>1e-6 ≤ Pc &lt; 1e-4 <b>OR</b> 1 km ≤ miss ≤ 5 km</span></div>
+            <div className="policy-tier safe"><i /><strong>Safe</strong><span>Pc &lt; 1e-6 <b>AND</b> miss &gt; 5 km</span></div>
+            <p className="policy-note">These are the screening conditions from your brief. Confirm the final operational thresholds with your mission team and the referenced NASA/ESA guidance.</p>
+          </div>
+        </div>
+
+        <div className="case-suite">
+          <div className="case-suite-heading">
+            <div><strong>Threshold test cases</strong><span>Click a case to load and evaluate it.</span></div>
+            <button className="run-cases-button" type="button" onClick={runAllCases}>Run all {riskTestCases.length} cases</button>
+          </div>
+          {caseResults.length > 0 && (
+            <div className={`case-suite-status ${passedCases === riskTestCases.length ? "passed" : "failed"}`} role="status">
+              {passedCases === riskTestCases.length ? "All boundary tests passed" : "Some tests failed"} · {passedCases}/{riskTestCases.length}
+            </div>
+          )}
+          <div className="test-case-list">
+            {riskTestCases.map((scenario) => {
+              const status = caseResults.find((item) => item.id === scenario.id);
+              return (
+                <button className="test-case-row" key={scenario.id} type="button" onClick={() => runCase(scenario)}>
+                  <span className={`case-status ${status ? (status.passed ? "passed" : "failed") : ""}`}>{status ? (status.passed ? "✓" : "!") : "↗"}</span>
+                  <span className="test-case-name"><strong>{scenario.id}</strong><small>{scenario.name}</small></span>
+                  <span className="test-case-inputs">Pc {formatProbability(scenario.pc)} <i /> {formatRaw(scenario.missDistanceKm)} km</span>
+                  <span className={`test-case-expected ${scenario.expected}`}>{scenario.expected}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ModelEvaluation() {
+  const { model } = datasetSummary;
+  const { modelEvaluation, warningWindow } = datasetSummary.splits.test;
+  const critical = modelEvaluation.classMetrics.critical;
+  const earliestTestHours = datasetSummary.splits.test.timeRangeDays.min * 24;
+  return (
+    <section className="model-section" id="model">
+      <div className="section-heading">
+        <div><span className="panel-eyebrow">TRAIN SPLIT → HELD-OUT TEST SPLIT</span><h2>AI model &amp; 24-hour warnings</h2></div>
+        <span className="model-kind">{model.algorithm}</span>
+      </div>
+      <div className="model-panel">
+        <div className="model-stat-grid">
+          <article><span>Test Pc error (MAE)</span><strong>{formatRaw(modelEvaluation.meanAbsoluteError)} <small>log10 units</small></strong></article>
+          <article><span>Test tier accuracy</span><strong>{(modelEvaluation.accuracy * 100).toFixed(1)}<small>%</small></strong></article>
+          <article><span>Critical recall</span><strong>{(critical.recall * 100).toFixed(1)}<small>%</small></strong></article>
+          <article><span>Elevated recall</span><strong>{(modelEvaluation.classMetrics.elevated.recall * 100).toFixed(1)}<small>%</small></strong></article>
+        </div>
+        <div className={`warning-window ${warningWindow.uniqueConjunctions ? "has-events" : ""}`}>
+          <span className="warning-icon"><Icon name="clock" size={17} /></span>
+          <div className="warning-copy">
+            <strong>Next 24 hours · held-out test split</strong>
+            <span>{warningWindow.uniqueConjunctions
+              ? `${warningWindow.uniqueConjunctions.toLocaleString()} unique conjunctions observed; ${warningWindow.actionableConjunctions.toLocaleString()} elevated or critical, ${warningWindow.withinFiveKmConjunctions.toLocaleString()} within 5 km.`
+              : `No test observations fall inside the 24-hour window. The earliest test TCA is ${formatRaw(earliestTestHours)} hours away.`}</span>
+            <small>Training reference (historical, not live): {datasetSummary.splits.train.warningWindow.uniqueConjunctions.toLocaleString()} unique conjunctions within 24 h; {datasetSummary.splits.train.warningWindow.actionableConjunctions.toLocaleString()} were elevated or critical.</small>
+          </div>
+          <div className="warning-count"><strong>{warningWindow.actionableConjunctions.toLocaleString()}</strong><span>actionable</span></div>
+        </div>
+        <div className="model-explanation">
+          <Icon name="spark" size={16} />
+          <p>Model: {model.trainRows.toLocaleString()} training rows; {modelEvaluation.rows.toLocaleString()} held-out test rows. Inputs are restricted to the 12 permitted telemetry fields. Risk tiers are derived using Pc <code>10 ** risk</code> and the distance rules above. Metrics are row-level, so repeated messages from one conjunction are not statistically independent. Because miss distance is also part of the screening label, tier scores partly reflect reproducing that rule. Test Pc MAE is {formatRaw(modelEvaluation.meanAbsoluteError)} log10 units (R² {formatRaw(modelEvaluation.rSquared)}): treat predicted probabilities as experimental, not calibrated operational Pc.</p>
+        </div>
+        <div className="model-reliability-note" role="note">
+          <strong>Probability calibration warning</strong>
+          <span>A {formatRaw(modelEvaluation.meanAbsoluteError)} log10(Pc) test error means the model&apos;s probability estimates are not yet reliable for real maneuver decisions. This prototype is for exploration; do not make operational decisions from model predictions.</span>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Analytics() {
   return (
     <section className="analytics-section" id="analytics">
       <div className="analytics-icon"><Icon name="spark" size={20} /></div>
-      <div className="analytics-copy"><span>ORBITAL AI · DECISION-SUPPORT CONCEPT</span><h3>Earlier signals. Safer orbits.</h3><p>Explore how AI-assisted risk scoring could prioritize conjunctions using orbital data and uncertainty estimates.</p></div>
-      <div className="analytics-stat"><strong>94.8<span>%</span></strong><span>prediction confidence</span></div>
-      <div className="analytics-stat"><strong>6.2<span>h</span></strong><span>average lead time</span></div>
-      <button className="analytics-action" type="button" onClick={() => document.getElementById("conjunctions")?.scrollIntoView({ behavior: "smooth" })}>Explore insights <Icon name="arrow" size={15} /></button>
+      <div className="analytics-copy"><span>READY FOR THE NEXT STEP</span><h3>Train a collision-risk model</h3><p>Use training rows to fit a model, then evaluate predictions against the labeled test split. Keep the two splits separate.</p></div>
+      <div className="analytics-stat"><strong>{datasetSummary.splits.train.featureColumns}</strong><span>input features</span></div>
+      <div className="analytics-stat"><strong>2</strong><span>labeled data splits</span></div>
+      <button className="analytics-action" type="button" onClick={() => document.getElementById("datasets")?.scrollIntoView({ behavior: "smooth" })}>Review dataset <Icon name="arrow" size={15} /></button>
     </section>
   );
 }
@@ -356,18 +663,21 @@ function App() {
         <Topbar query={searchTerm} onQueryChange={setSearchTerm} />
         <div className="dashboard-content">
           <section className="page-heading">
-            <div><div className="greeting">SATURDAY, 31 OCTOBER 2026 <span className="greeting-dot" /> ORBITAL DAY 304</div><h1>Good morning, Alex <span>✦</span></h1><p>Here&apos;s what&apos;s happening across your fleet today.</p></div>
+            <div><div className="greeting">AI-ASSISTED COLLISION AVOIDANCE <span className="greeting-dot" /> TRAINING + TEST DATA</div><h1>Safer satellite orbits <span>✦</span></h1><p>Explore the supplied conjunction dataset and the signals an AI risk model could learn from.</p></div>
             <button type="button" className="export-button" onClick={() => window.print()}><Icon name="download" size={16} /> Export report</button>
           </section>
-          <section className="metrics-grid" aria-label="Fleet overview">
-            <MetricCard label="Active spacecraft" value="248" detail="Across 3 orbital bands" icon="satellite" tone="blue" trend="+12" />
-            <MetricCard label="Tracked objects" value="18,420" detail="Illustrative catalog" icon="orbit" tone="teal" trend="+2.4%" />
-            <MetricCard label="Upcoming conjunctions" value="12" detail="In the next 24 hours" icon="crosshair" tone="amber" trend="3 high risk" />
-            <MetricCard label="Maneuvers avoided" value="98.6%" detail="Successful this quarter" icon="shield" tone="green" trend="↑ 1.2%" />
+          <section className="metrics-grid" aria-label="Supplied dataset overview">
+            <MetricCard label="Training conjunctions" value={datasetSummary.splits.train.uniqueConjunctions.toLocaleString()} detail={`${datasetSummary.splits.train.rows.toLocaleString()} telemetry rows`} icon="satellite" tone="blue" />
+            <MetricCard label="Held-out test events" value={datasetSummary.splits.test.uniqueConjunctions.toLocaleString()} detail={`${datasetSummary.splits.test.rows.toLocaleString()} test rows`} icon="orbit" tone="teal" />
+            <MetricCard label="Critical recall" value={`${(datasetSummary.splits.test.modelEvaluation.classMetrics.critical.recall * 100).toFixed(1)}%`} detail="Held-out test labels" icon="crosshair" tone="amber" />
+            <MetricCard label="24h test warnings" value={datasetSummary.splits.test.warningWindow.actionableConjunctions.toLocaleString()} detail="No unseen live telemetry" icon="shield" tone="green" />
           </section>
+          <RiskEvaluator />
+          <ModelEvaluation />
+          <DatasetAnalytics />
           <section className="orbital-section">
             <div className="section-heading orbital-heading">
-                <div><span className="panel-eyebrow">SITUATIONAL AWARENESS · SIMULATION</span><h2>Orbital overview</h2></div>
+                <div><span className="panel-eyebrow">ILLUSTRATIVE DEMO · NOT FROM CSV DATA</span><h2>Orbital overview</h2></div>
                 <div className="map-time"><span className="demo-dot" /> DEMO DATA <span>·</span> 12:24 UTC</div>
             </div>
             <div className="orbital-layout">
@@ -375,6 +685,7 @@ function App() {
               <RiskSummary event={selectedEvent} onSchedule={() => setScheduled(!scheduled)} scheduled={scheduled} />
             </div>
           </section>
+          <div className="demo-section-label">Demo-only spacecraft and conjunction examples below are illustrative and are not derived from the supplied datasets.</div>
           <Conjunctions selectedEvent={selectedEvent} onSelect={(event) => { setSelectedEvent(event); setScheduled(false); }} searchTerm={searchTerm} />
           <FleetHealth />
           <Analytics />
