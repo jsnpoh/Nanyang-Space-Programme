@@ -1,0 +1,706 @@
+{
+  "source": "Collision Avoidance Challenge train/test CSV files.",
+  "features": {
+    "columns": [
+      "time_to_tca",
+      "miss_distance",
+      "relative_speed",
+      "relative_position_r",
+      "relative_position_t",
+      "relative_position_n",
+      "c_sigma_r",
+      "t_sigma_r",
+      "max_risk_estimate",
+      "F10",
+      "AP",
+      "c_object_type"
+    ],
+    "target": "risk (log10(Pc))",
+    "excluded": [
+      "event_id is used only to count unique conjunctions."
+    ]
+  },
+  "riskAxis": {
+    "min": -30,
+    "max": -1.4428538576816372
+  },
+  "policy": {
+    "probabilitySafe": 0.000001,
+    "probabilityCritical": 0.0001,
+    "criticalMissDistanceKm": 1,
+    "safeMissDistanceKm": 5,
+    "units": {
+      "missDistance": "meters in CSV; kilometers in UI thresholds",
+      "timeToTca": "days in CSV"
+    },
+    "note": "Screening thresholds supplied in the project brief; confirm against the mission-approved conjunction policy before operational use."
+  },
+  "model": {
+    "algorithm": "standardized ridge regression",
+    "target": "risk = log10(Pc)",
+    "trainRows": 162634,
+    "ridge": 0.25,
+    "numericFeatures": [
+      "time_to_tca",
+      "miss_distance",
+      "relative_speed",
+      "relative_position_r",
+      "relative_position_t",
+      "relative_position_n",
+      "c_sigma_r",
+      "t_sigma_r",
+      "max_risk_estimate",
+      "F10",
+      "AP"
+    ],
+    "categoricalFeature": "c_object_type",
+    "objectTypes": [
+      "DEBRIS",
+      "PAYLOAD",
+      "ROCKET BODY",
+      "TBA",
+      "UNKNOWN"
+    ],
+    "imputation": "Missing numeric feature values use the training-split mean.",
+    "transforms": {
+      "distanceSpeedAndSigma": "log1p(value / 1000)",
+      "relativePosition": "sign(value) * log1p(abs(value) / 1000)",
+      "timeToTca": "days",
+      "maximumRiskEstimate": "unchanged",
+      "spaceWeather": "unchanged"
+    },
+    "numericMeans": [
+      3.3501896792726957,
+      2.449673184634895,
+      2.3413873454730307,
+      -0.028086349122385373,
+      0.006867026095835452,
+      0.022627020278365186,
+      0.3402930783417312,
+      0.1753950974174738,
+      -6.282331755731058,
+      78.09585269427258,
+      8.608034041023798
+    ],
+    "numericScales": [
+      2.0131082053088636,
+      1.0057008110135026,
+      0.555999025811098,
+      0.42245962083319616,
+      2.1587230406902065,
+      2.282699989264067,
+      1.4200350967351596,
+      1.3565857004522166,
+      1.0125412846927038,
+      14.701667788420487,
+      8.453666244521143
+    ],
+    "coefficients": [
+      -22.185547845755174,
+      4.983819984750725,
+      -1.2109518139518107,
+      -0.6917691093332928,
+      0.14121488219757988,
+      0.07099505952669434,
+      0.03775979931417442,
+      2.1458933038213273,
+      1.4952029579511947,
+      1.8558636188121918,
+      0.2097932729857915,
+      0.12405589427264158,
+      2.7605939452755033,
+      -2.9761871565642357,
+      -2.7624670030035654,
+      -2.042645143700746,
+      5.020704770764004
+    ],
+    "minimumTarget": -30,
+    "maximumTarget": -1.4428538576816372
+  },
+  "splits": {
+    "train": {
+      "split": "train",
+      "fileName": "train_data.csv",
+      "rows": 162634,
+      "columns": 103,
+      "featureColumns": 12,
+      "uniqueConjunctions": 13154,
+      "objectTypes": {
+        "UNKNOWN": 50542,
+        "DEBRIS": 94470,
+        "PAYLOAD": 15498,
+        "ROCKET BODY": 1947,
+        "TBA": 177
+      },
+      "featureMissing": {
+        "time_to_tca": 0,
+        "miss_distance": 0,
+        "relative_speed": 0,
+        "relative_position_r": 0,
+        "relative_position_t": 0,
+        "relative_position_n": 0,
+        "c_sigma_r": 11,
+        "t_sigma_r": 0,
+        "max_risk_estimate": 0,
+        "F10": 6822,
+        "AP": 6822
+      },
+      "target": {
+        "field": "risk",
+        "labeledRows": 162634,
+        "missingRows": 0
+      },
+      "stats": {
+        "risk": {
+          "count": 162634,
+          "missing": 0,
+          "min": -30,
+          "max": -1.4428538576816372,
+          "mean": -19.34060305846515
+        },
+        "miss_distance": {
+          "count": 162634,
+          "missing": 0,
+          "min": 9,
+          "max": 67373,
+          "mean": 16531.662087878303
+        },
+        "relative_speed": {
+          "count": 162634,
+          "missing": 0,
+          "min": 4,
+          "max": 17138,
+          "mean": 10655.819637960081
+        },
+        "time_to_tca": {
+          "count": 162634,
+          "missing": 0,
+          "min": -0.14980810185185187,
+          "max": 6.993832407407408,
+          "mean": 3.3501896792726957
+        }
+      },
+      "actualTierCounts": {
+        "safe": 115812,
+        "elevated": 35192,
+        "critical": 11630
+      },
+      "warningWindow": {
+        "horizonHours": 24,
+        "timeUnit": "days",
+        "observedRecords": 25623,
+        "uniqueConjunctions": 9445,
+        "withinFiveKmRows": 6769,
+        "withinFiveKmConjunctions": 2499,
+        "withinOneKmConjunctions": 663,
+        "criticalConjunctions": 664,
+        "elevatedConjunctions": 1872,
+        "actionableConjunctions": 2536
+      },
+      "topRiskObservations": [
+        {
+          "row": 30079,
+          "eventId": "2427",
+          "risk": -1.4428538576816372,
+          "missDistance": 43,
+          "relativeSpeed": 14842,
+          "timeToTca": 5.180280162037037
+        },
+        {
+          "row": 30080,
+          "eventId": "2427",
+          "risk": -1.4899914870597653,
+          "missDistance": 42,
+          "relativeSpeed": 14842,
+          "timeToTca": 4.864712939814815
+        },
+        {
+          "row": 14222,
+          "eventId": "1148",
+          "risk": -1.54591772926891,
+          "missDistance": 123,
+          "relativeSpeed": 14985,
+          "timeToTca": 5.24016337962963
+        },
+        {
+          "row": 14223,
+          "eventId": "1148",
+          "risk": -1.6846595233727115,
+          "missDistance": 119,
+          "relativeSpeed": 14985,
+          "timeToTca": 4.773357847222221
+        },
+        {
+          "row": 14220,
+          "eventId": "1148",
+          "risk": -1.8074325466634544,
+          "missDistance": 166,
+          "relativeSpeed": 14985,
+          "timeToTca": 5.876899803240741
+        },
+        {
+          "row": 92321,
+          "eventId": "7465",
+          "risk": -1.8291517963566908,
+          "missDistance": 72,
+          "relativeSpeed": 14855,
+          "timeToTca": 2.1709452083333334
+        },
+        {
+          "row": 14221,
+          "eventId": "1148",
+          "risk": -1.8309136425129773,
+          "missDistance": 148,
+          "relativeSpeed": 14985,
+          "timeToTca": 5.602802476851852
+        },
+        {
+          "row": 128391,
+          "eventId": "10378",
+          "risk": -1.999132278468773,
+          "missDistance": 50,
+          "relativeSpeed": 13975,
+          "timeToTca": 6.288135625000002
+        }
+      ],
+      "topPredictions": [],
+      "timeRangeDays": {
+        "min": -0.14980810185185187,
+        "max": 6.993832407407408
+      },
+      "riskHistogram": [
+        {
+          "from": -30,
+          "to": -27.62023782147347,
+          "count": 69265
+        },
+        {
+          "from": -27.62023782147347,
+          "to": -25.24047564294694,
+          "count": 2167
+        },
+        {
+          "from": -25.24047564294694,
+          "to": -22.86071346442041,
+          "count": 2612
+        },
+        {
+          "from": -22.86071346442041,
+          "to": -20.48095128589388,
+          "count": 3140
+        },
+        {
+          "from": -20.48095128589388,
+          "to": -18.101189107367347,
+          "count": 3736
+        },
+        {
+          "from": -18.101189107367347,
+          "to": -15.721426928840819,
+          "count": 4802
+        },
+        {
+          "from": -15.721426928840819,
+          "to": -13.34166475031429,
+          "count": 14359
+        },
+        {
+          "from": -13.34166475031429,
+          "to": -10.961902571787757,
+          "count": 11451
+        },
+        {
+          "from": -10.961902571787757,
+          "to": -8.582140393261227,
+          "count": 14596
+        },
+        {
+          "from": -8.582140393261227,
+          "to": -6.202378214734697,
+          "count": 24280
+        },
+        {
+          "from": -6.202378214734697,
+          "to": -3.8226160362081707,
+          "count": 11711
+        },
+        {
+          "from": -3.8226160362081707,
+          "to": -1.4428538576816372,
+          "count": 515
+        }
+      ]
+    },
+    "test": {
+      "split": "test",
+      "fileName": "test_data.csv",
+      "rows": 24484,
+      "columns": 103,
+      "featureColumns": 12,
+      "uniqueConjunctions": 2167,
+      "objectTypes": {
+        "UNKNOWN": 7112,
+        "DEBRIS": 14942,
+        "ROCKET BODY": 311,
+        "PAYLOAD": 2090,
+        "TBA": 29
+      },
+      "featureMissing": {
+        "time_to_tca": 0,
+        "miss_distance": 0,
+        "relative_speed": 0,
+        "relative_position_r": 0,
+        "relative_position_t": 0,
+        "relative_position_n": 0,
+        "c_sigma_r": 6,
+        "t_sigma_r": 0,
+        "max_risk_estimate": 0,
+        "F10": 1329,
+        "AP": 1329
+      },
+      "target": {
+        "field": "risk",
+        "labeledRows": 24484,
+        "missingRows": 0
+      },
+      "stats": {
+        "risk": {
+          "count": 24484,
+          "missing": 0,
+          "min": -30,
+          "max": -1.5329841815615644,
+          "mean": -16.54847317003054
+        },
+        "miss_distance": {
+          "count": 24484,
+          "missing": 0,
+          "min": 17,
+          "max": 65927,
+          "mean": 14585.168640744976
+        },
+        "relative_speed": {
+          "count": 24484,
+          "missing": 0,
+          "min": 58,
+          "max": 16956,
+          "mean": 10837.46250612645
+        },
+        "time_to_tca": {
+          "count": 24484,
+          "missing": 0,
+          "min": 2.000213078703704,
+          "max": 6.993168715277778,
+          "mean": 4.332107567496861
+        }
+      },
+      "actualTierCounts": {
+        "safe": 15756,
+        "elevated": 6501,
+        "critical": 2227
+      },
+      "warningWindow": {
+        "horizonHours": 24,
+        "timeUnit": "days",
+        "observedRecords": 0,
+        "uniqueConjunctions": 0,
+        "withinFiveKmRows": 0,
+        "withinFiveKmConjunctions": 0,
+        "withinOneKmConjunctions": 0,
+        "criticalConjunctions": 0,
+        "elevatedConjunctions": 0,
+        "actionableConjunctions": 0,
+        "predictedCriticalConjunctions": 0,
+        "predictedElevatedConjunctions": 0,
+        "predictedActionableConjunctions": 0
+      },
+      "topRiskObservations": [
+        {
+          "row": 14268,
+          "eventId": "1259",
+          "risk": -1.5329841815615644,
+          "missDistance": 44,
+          "relativeSpeed": 14475,
+          "timeToTca": 2.814740648148148
+        },
+        {
+          "row": 14267,
+          "eventId": "1259",
+          "risk": -1.6443569497791308,
+          "missDistance": 59,
+          "relativeSpeed": 14475,
+          "timeToTca": 3.08232162037037
+        },
+        {
+          "row": 14269,
+          "eventId": "1259",
+          "risk": -1.851089006890644,
+          "missDistance": 89,
+          "relativeSpeed": 14475,
+          "timeToTca": 2.4473333564814816
+        },
+        {
+          "row": 14266,
+          "eventId": "1259",
+          "risk": -2.165960981840533,
+          "missDistance": 60,
+          "relativeSpeed": 14475,
+          "timeToTca": 3.4821480208333337
+        },
+        {
+          "row": 17719,
+          "eventId": "1568",
+          "risk": -2.3367703654671317,
+          "missDistance": 49,
+          "relativeSpeed": 13890,
+          "timeToTca": 3.279733148148148
+        },
+        {
+          "row": 17718,
+          "eventId": "1568",
+          "risk": -2.3403689883929992,
+          "missDistance": 41,
+          "relativeSpeed": 13890,
+          "timeToTca": 3.554594305555556
+        },
+        {
+          "row": 17717,
+          "eventId": "1568",
+          "risk": -2.368049173740783,
+          "missDistance": 48,
+          "relativeSpeed": 13890,
+          "timeToTca": 3.878587337962963
+        },
+        {
+          "row": 17720,
+          "eventId": "1568",
+          "risk": -2.382894769497622,
+          "missDistance": 123,
+          "relativeSpeed": 13890,
+          "timeToTca": 2.898425185185185
+        }
+      ],
+      "topPredictions": [
+        {
+          "row": 1383,
+          "eventId": "128",
+          "actualRisk": -13.908684840302778,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 1.2339999999999985e-14,
+          "missDistanceMeters": 1741,
+          "relativeSpeed": 8434,
+          "timeToTcaDays": 4.842033923611112,
+          "actualTier": "elevated",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 1743,
+          "eventId": "161",
+          "actualRisk": -13.940815382368626,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 1.1460000000000067e-14,
+          "missDistanceMeters": 4809,
+          "relativeSpeed": 15061,
+          "timeToTcaDays": 6.1511041087962965,
+          "actualTier": "elevated",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 2308,
+          "eventId": "205",
+          "actualRisk": -14.187621488845807,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 6.491999999999988e-15,
+          "missDistanceMeters": 8372,
+          "relativeSpeed": 10702,
+          "timeToTcaDays": 6.583392245370371,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 2756,
+          "eventId": "243",
+          "actualRisk": -14.418050341626682,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 3.819000000000005e-15,
+          "missDistanceMeters": 5489,
+          "relativeSpeed": 15341,
+          "timeToTcaDays": 6.613078101851853,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 2843,
+          "eventId": "249",
+          "actualRisk": -14.596707854841744,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 2.531000000000008e-15,
+          "missDistanceMeters": 23485,
+          "relativeSpeed": 2687,
+          "timeToTcaDays": 4.351917604166667,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 3708,
+          "eventId": "328",
+          "actualRisk": -15.532096053477199,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 2.9370000000000066e-16,
+          "missDistanceMeters": 8075,
+          "relativeSpeed": 5169,
+          "timeToTcaDays": 6.808535729166668,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 4026,
+          "eventId": "355",
+          "actualRisk": -14.596707854841744,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 2.531000000000008e-15,
+          "missDistanceMeters": 25995,
+          "relativeSpeed": 2716,
+          "timeToTcaDays": 4.549504594907408,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        },
+        {
+          "row": 4935,
+          "eventId": "436",
+          "actualRisk": -14.418050341626682,
+          "predictedRisk": -1.4428538576816372,
+          "predictedPc": 0.03606999999999997,
+          "actualPc": 3.819000000000005e-15,
+          "missDistanceMeters": 12813,
+          "relativeSpeed": 15079,
+          "timeToTcaDays": 6.8924801157407405,
+          "actualTier": "safe",
+          "predictedTier": "critical"
+        }
+      ],
+      "timeRangeDays": {
+        "min": 2.000213078703704,
+        "max": 6.993168715277778
+      },
+      "modelEvaluation": {
+        "rows": 24484,
+        "uniqueConjunctions": 2167,
+        "meanAbsoluteError": 6.850398087027166,
+        "rootMeanSquaredError": 8.008866975578439,
+        "rSquared": 0.33844280109698355,
+        "accuracy": 0.9500490115994119,
+        "classMetrics": {
+          "safe": {
+            "actualRows": 15756,
+            "predictedRows": 16690,
+            "precision": 0.939185140802876,
+            "recall": 0.9948591012947449,
+            "f1": 0.9662207976329902
+          },
+          "elevated": {
+            "actualRows": 6501,
+            "predictedRows": 5561,
+            "precision": 0.9793202661391835,
+            "recall": 0.8377172742654976,
+            "f1": 0.9030011606698723
+          },
+          "critical": {
+            "actualRows": 2227,
+            "predictedRows": 2233,
+            "precision": 0.9583519928347515,
+            "recall": 0.9609339919173776,
+            "f1": 0.9596412556053812
+          }
+        },
+        "confusionMatrix": {
+          "safe": {
+            "safe": 15675,
+            "elevated": 35,
+            "critical": 46
+          },
+          "elevated": {
+            "safe": 1008,
+            "elevated": 5446,
+            "critical": 47
+          },
+          "critical": {
+            "safe": 7,
+            "elevated": 80,
+            "critical": 2140
+          }
+        },
+        "trueLabelRows": 24484,
+        "predictedRows": 24484
+      },
+      "riskHistogram": [
+        {
+          "from": -30,
+          "to": -27.62023782147347,
+          "count": 7237
+        },
+        {
+          "from": -27.62023782147347,
+          "to": -25.24047564294694,
+          "count": 427
+        },
+        {
+          "from": -25.24047564294694,
+          "to": -22.86071346442041,
+          "count": 434
+        },
+        {
+          "from": -22.86071346442041,
+          "to": -20.48095128589388,
+          "count": 564
+        },
+        {
+          "from": -20.48095128589388,
+          "to": -18.101189107367347,
+          "count": 626
+        },
+        {
+          "from": -18.101189107367347,
+          "to": -15.721426928840819,
+          "count": 892
+        },
+        {
+          "from": -15.721426928840819,
+          "to": -13.34166475031429,
+          "count": 2231
+        },
+        {
+          "from": -13.34166475031429,
+          "to": -10.961902571787757,
+          "count": 1909
+        },
+        {
+          "from": -10.961902571787757,
+          "to": -8.582140393261227,
+          "count": 2344
+        },
+        {
+          "from": -8.582140393261227,
+          "to": -6.202378214734697,
+          "count": 4143
+        },
+        {
+          "from": -6.202378214734697,
+          "to": -3.8226160362081707,
+          "count": 3522
+        },
+        {
+          "from": -3.8226160362081707,
+          "to": -1.4428538576816372,
+          "count": 155
+        }
+      ]
+    }
+  }
+}
